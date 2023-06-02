@@ -1,0 +1,84 @@
+name: Download Packages
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
+  MOUNT_POINT: "/tmp/pi-top-os"
+  PACKAGES_FOLDER: "packages"
+
+jobs:
+  download-packages:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: GitHub Environment Variables Action
+        uses: FranzDiebold/github-env-vars-action@v2.7.0
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            systemd-container \
+            qemu-user-static \
+            kpartx
+
+      # TODO: cache image
+      - name: Download pi-topOS image
+        run: |
+          wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
+          unzip pi-topOS.zip
+          echo "IMG_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
+
+      # Taken from https://github.com/damianperera/mount-image-action/blob/main/action.yml
+      # The difference is the partition numbers for boot & root in pi-topOS are different (2,3 instead of 0,1)
+      - name: Mount Image
+        id: mount-image
+        run: |
+          echo Attempting to mount ${{ env.IMG_FILE }}
+          imagePath=${{ env.IMG_FILE }}
+          mountPath=${{ env.MOUNT_POINT }}
+          kpartx="$(sudo kpartx -avs $imagePath)" || echo 1>&2 "ERROR: could not create loop devices for image"
+          blockDevices=($(grep -o 'loop.p.' <<<"$kpartx"))
+          sleep 0.5
+          echo $blockDevices
+          boot=/dev/mapper/${blockDevices[2]}
+          root=/dev/mapper/${blockDevices[3]}
+          echo Attempting to mount $boot to $mountPath/boot and $root to $mountPath
+          sudo mkdir -p $mountPath || echo 1>&2 "ERROR: could not create the root partition's mount directory $mountPath"
+          sudo mount -t ext4 $root $mountPath || echo 1>&2 "ERROR: could not mount $root device to $mountPath"
+          sudo mkdir -p $mountPath/boot || echo 1>&2 "ERROR: could not create the boot partition's mount directory $mountPath/boot"
+          sudo mount -t vfat $boot $mountPath/boot || echo 1>&2 "ERROR: could not mount $boot device to $mountPath/boot"
+          echo "Mounted Image Details:"
+          df -h $mountPath/boot $mountPath | sed -e "s#$(pwd)/##" || echo 1>&2 "ERROR: could not inspect mounted partitions at $mountPath and $mountPath"
+          echo Mounted Filesystem: && ls -la $mountPath
+          echo Mounted Boot Partition: && ls -la $mountPath/boot
+
+      # TODO: cache downloaded packages - subsequent should remove old ones and download new ones
+      - name: Update pi-topOS container and download packages
+        run: |
+          sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
+            apt update
+            apt dist-upgrade -y
+            cd /packages
+            ls -lh
+            bash ./download-packages.sh
+          EOF
+
+      - name: List packages
+        run: |
+          ls -lh "${{ env.PACKAGES_FOLDER }}"
+
+      - name: Upload set of packages
+        uses: actions/upload-artifact@v2
+        with:
+          name: packages
+          path: "${{ env.PACKAGES_FOLDER }}/packages.tar.gz"
