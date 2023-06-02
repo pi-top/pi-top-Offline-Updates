@@ -31,20 +31,40 @@ jobs:
             qemu-user-static \
             kpartx
 
-      # TODO: cache image
+      - name: Get pi-topOS image filename
+        run: |
+          echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
+
+      - name: Restore cached pi-topOS image
+        id: pi-top-os-image-restore
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            ${{ env.IMAGE_FILE }}
+          key: ${{ runner.os }}-image
+
       - name: Download pi-topOS image
+        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
         run: |
           wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
-          echo "IMG_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
+
+      - name: Cache pi-topOS image
+        id: pi-top-os-image-save
+        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            ${{ env.IMAGE_FILE }}
+          key: ${{ steps.pi-top-os-image-restore.outputs.cache-primary-key }}
 
       # Taken from https://github.com/damianperera/mount-image-action/blob/main/action.yml
       # The difference is the partition numbers for boot & root in pi-topOS are different (2,3 instead of 0,1)
       - name: Mount Image
         id: mount-image
         run: |
-          echo Attempting to mount ${{ env.IMG_FILE }}
-          imagePath=${{ env.IMG_FILE }}
+          echo Attempting to mount ${{ env.IMAGE_FILE }}
+          imagePath=${{ env.IMAGE_FILE }}
           mountPath=${{ env.MOUNT_POINT }}
           kpartx="$(sudo kpartx -avs $imagePath)" || echo 1>&2 "ERROR: could not create loop devices for image"
           blockDevices=($(grep -o 'loop.p.' <<<"$kpartx"))
