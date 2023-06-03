@@ -73,15 +73,14 @@ jobs:
           tar -xf packages.tar.gz
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
-      - name: Mount OS Image
-        uses: jcapona/mount-image-partition@v0.1
+      - name: Mount OS Image root partition
+        uses: jcapona/mount-image-partition-action@v0.2
         with:
           imagePath: ${{ env.IMAGE_FILE }}
           mountPoint: ${{ env.MOUNT_POINT }}
           partitionIndex: 3
           filesystem: ext4
 
-          # TODO: handle cached packages - script should update the folder with new packages if necessary
       - name: Update pi-topOS container and download packages
         run: |
           sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
