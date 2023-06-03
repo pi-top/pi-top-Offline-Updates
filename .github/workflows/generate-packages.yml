@@ -58,31 +58,30 @@ jobs:
             ${{ env.IMAGE_FILE }}
           key: ${{ steps.pi-top-os-image-restore.outputs.cache-primary-key }}
 
-      # Taken from https://github.com/damianperera/mount-image-action/blob/main/action.yml
-      # The difference is the partition numbers for boot & root in pi-topOS are different (2,3 instead of 0,1)
-      - name: Mount Image
-        id: mount-image
-        run: |
-          echo Attempting to mount ${{ env.IMAGE_FILE }}
-          imagePath=${{ env.IMAGE_FILE }}
-          mountPath=${{ env.MOUNT_POINT }}
-          kpartx="$(sudo kpartx -avs $imagePath)" || echo 1>&2 "ERROR: could not create loop devices for image"
-          blockDevices=($(grep -o 'loop.p.' <<<"$kpartx"))
-          sleep 0.5
-          echo $blockDevices
-          boot=/dev/mapper/${blockDevices[2]}
-          root=/dev/mapper/${blockDevices[3]}
-          echo Attempting to mount $boot to $mountPath/boot and $root to $mountPath
-          sudo mkdir -p $mountPath || echo 1>&2 "ERROR: could not create the root partition's mount directory $mountPath"
-          sudo mount -t ext4 $root $mountPath || echo 1>&2 "ERROR: could not mount $root device to $mountPath"
-          sudo mkdir -p $mountPath/boot || echo 1>&2 "ERROR: could not create the boot partition's mount directory $mountPath/boot"
-          sudo mount -t vfat $boot $mountPath/boot || echo 1>&2 "ERROR: could not mount $boot device to $mountPath/boot"
-          echo "Mounted Image Details:"
-          df -h $mountPath/boot $mountPath | sed -e "s#$(pwd)/##" || echo 1>&2 "ERROR: could not inspect mounted partitions at $mountPath and $mountPath"
-          echo Mounted Filesystem: && ls -la $mountPath
-          echo Mounted Boot Partition: && ls -la $mountPath/boot
+      - name: Restore cached debs
+        id: packages-restore
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            packages.tar.gz
+          key: ${{ runner.os }}-packages-tar
 
-      # TODO: cache downloaded packages - subsequent should remove old ones and download new ones
+      - name: Extract cached debs
+        if: steps.packages-restore.outputs.cache-hit == 'true'
+        run: |
+          ls
+          tar -xf packages.tar.gz
+          ls -lh "${{ env.PACKAGES_FOLDER }}"
+
+      - name: Mount OS Image
+        uses: jcapona/mount-image-partition@v0.1
+        with:
+          imagePath: ${{ env.IMAGE_FILE }}
+          mountPoint: ${{ env.MOUNT_POINT }}
+          partitionIndex: 3
+          filesystem: ext4
+
+          # TODO: handle cached packages - script should update the folder with new packages if necessary
       - name: Update pi-topOS container and download packages
         run: |
           sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
@@ -97,8 +96,16 @@ jobs:
         run: |
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
+      - name: Cache downloaded debs
+        id: packages-save
+        uses: actions/cache/save@v3
+        with:
+          path: |
+            packages.tar.gz
+          key: ${{ steps.packages-restore.outputs.cache-primary-key }}
+
       - name: Upload set of packages
         uses: actions/upload-artifact@v2
         with:
           name: packages
-          path: "${{ env.PACKAGES_FOLDER }}/packages.tar.gz"
+          path: "packages.tar.gz"
