@@ -1,0 +1,97 @@
+#!/bin/bash
+###############################################################
+#                Unofficial 'Bash strict mode'                #
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/  #
+###############################################################
+set -euo pipefail
+IFS=$'\n\t'
+###############################################################
+
+log() {
+    msg="${1:-}"
+    echo "[$(date)] $msg" >>/tmp/usb_offline_updates.log
+    echo "${msg}"
+}
+
+is_mounted() {
+    return $(mount | grep -qs $DEVICE_NAME)
+}
+
+mount_device() {
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Device ${DEVICE} is already mounted, skipping mount"
+        return
+    fi
+    log "Mounting ${DEVICE} into ${MOUNT_POINT}"
+    mkdir -p "${MOUNT_POINT}"
+    mount -t "${FS}" "${DEVICE}" "${MOUNT_POINT}"
+    log $(ls -l "${MOUNT_POINT}")
+}
+
+umount_device() {
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Unmounting ${MOUNT_POINT}..."
+        sync
+        umount "${MOUNT_POINT}"
+        if [ -d "${MOUNT_POINT}" ]; then
+            log "Removing ${MOUNT_POINT}..."
+            rm -rf "${MOUNT_POINT}"
+        fi
+    else
+        log "Device ${DEVICE} is not mounted, skipping unmount"
+    fi
+}
+
+start_miniscreen_app() {
+    log "Starting miniscreen application..."
+    # TODO: start miniscreen app
+}
+
+has_offline_pitop_updates() {
+    # Check if mounted USB drive has offline pi-top updates
+    return 0
+}
+
+configure_local_apt_repository() {
+    log "Configuring local apt repository..."
+    sed -i "1s|^|deb [trusted=yes] file:${MOUNT_POINT} ./\n|" /etc/apt/sources.list
+}
+
+has_valid_format() {
+    # TODO: check if device has a valid format
+    return 0
+}
+
+handle_add() {
+    if ! has_valid_format; then
+        log "Device ${DEVICE} does not have a valid format, skipping mount"
+        exit
+    fi
+
+    mount_device
+
+    if has_offline_pitop_updates; then
+        configure_local_apt_repository
+        apt update
+    fi
+
+    start_miniscreen_app
+}
+
+OPERATION="${1}"
+DEVICE="${2}"
+FS="${3}"
+
+log "$OPERATION device $DEVICE with filesystem $FS"
+
+MOUNT_PATH="/tmp"
+DEVICE_NAME=$(basename ${DEVICE})
+MOUNT_POINT="${MOUNT_PATH}/${DEVICE_NAME}"
+
+if [ "${OPERATION}" = "add" ]; then
+    handle_add
+elif [ "${OPERATION}" = "removed" ]; then
+    umount_device
+else
+    log "Nothing to do with operation ${OPERATION}"
+fi

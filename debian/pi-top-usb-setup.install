@@ -1,0 +1,2 @@
+99-usb-drive-for-pitop-setup.rules            /lib/udev/rules.d/
+handle-usb-drive-for-pi-top-setup             /usr/bin/

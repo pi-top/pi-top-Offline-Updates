@@ -1,10 +1,11 @@
-name: Download Packages
+name: Download Packages for offline update
 
 on:
   pull_request:
   push:
-    branches:
-      - main
+    paths:
+      - download-packages.sh
+      - .github/workflows/download-packages.yml
   workflow_dispatch:
 
 env:
@@ -35,39 +36,30 @@ jobs:
         run: |
           echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
 
-      - name: Restore cached pi-topOS image
-        id: pi-top-os-image-restore
+      - name: Cache pi-topOS image
+        id: pi-top-os-image-cache
         uses: actions/cache/restore@v3
         with:
           path: |
             ${{ env.IMAGE_FILE }}
-          key: ${{ runner.os }}-image
+          key: ${{ runner.os }}-${{ env.IMAGE_FILE }}
 
       - name: Download pi-topOS image
-        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
+        if: steps.pi-top-os-image-cache.outputs.cache-hit != 'true'
         run: |
           wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
 
-      - name: Cache pi-topOS image
-        id: pi-top-os-image-save
-        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v3
-        with:
-          path: |
-            ${{ env.IMAGE_FILE }}
-          key: ${{ steps.pi-top-os-image-restore.outputs.cache-primary-key }}
-
-      - name: Restore cached debs
-        id: packages-restore
-        uses: actions/cache/restore@v3
+      - name: Cache packages
+        uses: actions/cache@v3
+        id: cache-packages
         with:
           path: |
             packages.tar.gz
-          key: ${{ runner.os }}-packages-tar
+          key: ${{ runner.os }}-${{ hashFiles('**/packages') }}
 
       - name: Extract cached debs
-        if: steps.packages-restore.outputs.cache-hit == 'true'
+        if: steps.cache-packages.outputs.cache-hit == 'true'
         run: |
           ls
           tar -xf packages.tar.gz
@@ -91,20 +83,14 @@ jobs:
             bash ./download-packages.sh
           EOF
 
-      - name: List packages
+      - name: List downloaded packages
         run: |
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
-      - name: Cache downloaded debs
-        id: packages-save
-        uses: actions/cache/save@v3
-        with:
-          path: |
-            packages.tar.gz
-          key: ${{ steps.packages-restore.outputs.cache-primary-key }}
-
       - name: Upload set of packages
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: packages
-          path: "packages.tar.gz"
+          path: |
+            packages.tar.gz
+            packages.list
