@@ -7,7 +7,7 @@ on:
       - download-packages.sh
       - .github/workflows/download-packages.yml
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 env:
@@ -65,9 +65,10 @@ jobs:
           key: ${{ runner.os }}-packages
 
       - name: Extract cached debs
+        if: steps.cache-packages.outputs.cache-hit == 'true'
         run: |
-          ls
-          [ -f packages.tar.gz ] && tar -xf packages.tar.gz
+          ls -lh
+          tar -xf packages.tar.gz
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
       - name: Mount OS Image root partition
@@ -102,13 +103,13 @@ jobs:
 
       - name: Authenticate with GCP
         uses: "google-github-actions/auth@v1.1.1"
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         with:
           credentials_json: ${{ secrets.WEB_GCR_UPLOAD_KEY }}
 
       - name: Upload to GCS
         uses: google-github-actions/upload-cloud-storage@v1.0.3
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/master'
         with:
           path: "."
           glob: "packages.tar.gz"
