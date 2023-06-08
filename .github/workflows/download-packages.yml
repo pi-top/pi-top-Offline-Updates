@@ -1,8 +1,11 @@
-name: Download Packages
+name: Download Packages for offline update
 
 on:
   pull_request:
   push:
+    paths:
+      - download-packages.sh
+      - .github/workflows/download-packages.yml
     branches:
       - main
   workflow_dispatch:
@@ -15,6 +18,11 @@ env:
 jobs:
   download-packages:
     runs-on: ubuntu-20.04
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
     steps:
       - name: GitHub Environment Variables Action
         uses: FranzDiebold/github-env-vars-action@v2.7.0
@@ -28,53 +36,42 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y \
             systemd-container \
-            qemu-user-static \
-            kpartx
+            qemu-user-static
 
       - name: Get pi-topOS image filename
         run: |
           echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
 
-      - name: Restore cached pi-topOS image
-        id: pi-top-os-image-restore
-        uses: actions/cache/restore@v3
+      - name: Cache pi-topOS image
+        id: pi-top-os-image-cache
+        uses: actions/cache@v3
         with:
           path: |
             ${{ env.IMAGE_FILE }}
-          key: ${{ runner.os }}-image
+          key: ${{ runner.os }}-${{ env.IMAGE_FILE }}
 
       - name: Download pi-topOS image
-        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
+        if: steps.pi-top-os-image-cache.outputs.cache-hit != 'true'
         run: |
           wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
 
-      - name: Cache pi-topOS image
-        id: pi-top-os-image-save
-        if: steps.pi-top-os-image-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v3
-        with:
-          path: |
-            ${{ env.IMAGE_FILE }}
-          key: ${{ steps.pi-top-os-image-restore.outputs.cache-primary-key }}
-
-      - name: Restore cached debs
-        id: packages-restore
-        uses: actions/cache/restore@v3
+      - name: Cache packages
+        uses: actions/cache@v3
+        id: cache-packages
         with:
           path: |
             packages.tar.gz
-          key: ${{ runner.os }}-packages-tar
+          key: ${{ runner.os }}-packages
 
       - name: Extract cached debs
-        if: steps.packages-restore.outputs.cache-hit == 'true'
         run: |
           ls
-          tar -xf packages.tar.gz
+          [ -f packages.tar.gz ] && tar -xf packages.tar.gz
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
       - name: Mount OS Image root partition
-        uses: jcapona/mount-image-partition-action@v0.2
+        uses: jcapona/mount-image-partition-action@v0.3
         with:
           imagePath: ${{ env.IMAGE_FILE }}
           mountPoint: ${{ env.MOUNT_POINT }}
@@ -85,26 +82,35 @@ jobs:
         run: |
           sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
             apt update
-            apt dist-upgrade -y
+            DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
             cd /packages
             ls -lh
             bash ./download-packages.sh
           EOF
 
-      - name: List packages
+      - name: List downloaded packages
         run: |
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
-      - name: Cache downloaded debs
-        id: packages-save
-        uses: actions/cache/save@v3
-        with:
-          path: |
-            packages.tar.gz
-          key: ${{ steps.packages-restore.outputs.cache-primary-key }}
-
-      - name: Upload set of packages
-        uses: actions/upload-artifact@v2
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v3
         with:
           name: packages
-          path: "packages.tar.gz"
+          path: |
+            packages.tar.gz
+            packages.list
+
+      - name: Authenticate with GCP
+        uses: "google-github-actions/auth@v1.1.1"
+        if: github.ref == 'refs/heads/main'
+        with:
+          credentials_json: ${{ secrets.WEB_GCR_UPLOAD_KEY }}
+
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v1.0.3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: "."
+          glob: "packages.tar.gz"
+          parent: false
+          destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
