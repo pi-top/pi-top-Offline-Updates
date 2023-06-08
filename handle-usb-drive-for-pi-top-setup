@@ -1,0 +1,20 @@
+#!/bin/bash
+###############################################################
+#                Unofficial 'Bash strict mode'                #
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/  #
+###############################################################
+set -euo pipefail
+IFS=$'\n\t'
+###############################################################
+
+log() {
+    msg="${1:-}"
+    echo "[$(date)] $msg" >>/tmp/pi-top-usb-setup.log
+    echo "${msg}"
+}
+
+OPERATION="${1}"
+DEVICE="${2}"
+FS="${3}"
+
+log "$OPERATION device $DEVICE with filesystem $FS"

@@ -1,0 +1,24 @@
+Source: pi-top-usb-setup-src
+Section: utils
+Priority: optional
+Maintainer: pi-top <deb-maintainers@pi-top.com>
+Build-Depends:
+ debhelper-compat (= 12),
+Standards-Version: 4.5.1
+Homepage: https://pi-top.com
+
+Package: pi-top-usb-setup
+Architecture: all
+Depends:
+ ${misc:Depends},
+ mount,
+ udev,
+Description: pi-top USB Configuration Tool
+ Easily configure a pi-top device using a USB drive.
+ .
+ The application detects a USB drive with a specific set of files and
+ can perform a device configuration, setting languages, keyboard layout,
+ wireless connection while also allowing the device to update its packages
+ without connecting to the internet..
+ This application is specifically developed to work on Raspberry Pi OS and
+ derivatives.
