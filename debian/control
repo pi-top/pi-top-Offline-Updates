@@ -11,6 +11,8 @@ Package: pi-top-usb-setup
 Architecture: all
 Depends:
  ${misc:Depends},
+# provides 'logger' to log to journal
+ bsdutils (>=1:2.36.1),
  mount,
  udev,
 Description: pi-top USB Configuration Tool

@@ -8,13 +8,108 @@ IFS=$'\n\t'
 ###############################################################
 
 log() {
-    msg="${1:-}"
-    echo "[$(date)] $msg" >>/tmp/pi-top-usb-setup.log
-    echo "${msg}"
+    if [ "$#" -gt 0 ]; then
+        msg="$1"
+    else
+        # Support reading from stdin
+        read msg
+    fi
+    logger -t pi-top-usb-setup "[$DEVICE | $OPERATION] $msg"
+}
+
+is_mounted() {
+    return $(mount | grep -qs "${DEVICE_NAME}")
+}
+
+mount_device() {
+    MOUNT_DST=${1:-}
+    if [ -z "${MOUNT_DST}" ]; then
+        log "No mount destination provided, exiting..."
+        exit 1
+    fi
+
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Device ${DEVICE} is already mounted, skipping mount"
+        return
+    fi
+
+    log "Mounting ${DEVICE} into ${MOUNT_DST}"
+    mkdir -p "${MOUNT_DST}"
+    mount -t "${FS}" "${DEVICE}" "${MOUNT_DST}"
+    log "$(ls -l "${MOUNT_DST}")"
+}
+
+umount_device() {
+    MOUNT_DST=${1:-}
+    if [ -z "${MOUNT_DST}" ]; then
+        log "No umount destination provided, exiting..."
+        exit 1
+    fi
+
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Unmounting ${MOUNT_DST}..."
+        sync
+        umount "${MOUNT_DST}"
+    else
+        log "Device ${DEVICE} is not mounted, skipping unmount"
+    fi
+
+    if [ -d "${MOUNT_DST}" ]; then
+        log "Removing ${MOUNT_DST}..."
+        rm -rf "${MOUNT_DST}"
+    fi
+}
+
+start_miniscreen_app() {
+    log "Starting miniscreen application..."
+    # TODO: start miniscreen app
+}
+
+has_pitop_offline_setup_files() {
+    if [ -f "${MOUNT_POINT}/pitop-usb-setup.tar.gz" ]; then
+        return 0
+    fi
+    return 1
+}
+
+remount_to_final_location() {
+    # Remount to location where our offline apt source will look for updates
+    umount_device "${MOUNT_POINT}"
+    mount_device "${FINAL_MOUNT_POINT}"
+}
+
+has_valid_format() {
+    # TODO: check if device has a valid format
+    return 0
+}
+
+handle_add() {
+    mount_device "${MOUNT_POINT}"
+
+    if has_pitop_offline_setup_files; then
+        remount_to_final_location
+        start_miniscreen_app
+    else
+        log "Nothing to do with device ${DEVICE}; exiting ..."
+        umount_device "${MOUNT_POINT}"
+    fi
 }
 
 OPERATION="${1}"
 DEVICE="${2}"
 FS="${3}"
 
+MOUNT_PATH="/tmp"
+DEVICE_NAME=$(basename "${DEVICE}")
+MOUNT_POINT="${MOUNT_PATH}/${DEVICE_NAME}"
+FINAL_MOUNT_POINT="/tmp/pitop-usb-setup"
+
 log "$OPERATION device $DEVICE with filesystem $FS"
+
+if [ "${OPERATION}" = "add" ]; then
+    handle_add
+elif [ "${OPERATION}" = "removed" ]; then
+    umount_device "${MOUNT_POINT}"
+else
+    log "Operation ${OPERATION} not supported, exiting..."
+fi
