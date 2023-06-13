@@ -1,3 +1,1 @@
-99-usb-drive-for-pitop-setup.rules            /lib/udev/rules.d/
-handle-usb-drive-for-pi-top-setup             /usr/lib/pi-top-usb-setup
-pi-top-offline.source                         /usr/lib/pi-top-usb-setup
+debian/extra/99-usb-drive-for-pitop-setup.rules            /lib/udev/rules.d/

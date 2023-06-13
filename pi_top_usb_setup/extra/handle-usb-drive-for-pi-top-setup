@@ -14,7 +14,7 @@ log() {
         # Support reading from stdin
         read msg
     fi
-    logger -t pi-top-usb-setup "[$DEVICE | $OPERATION] $msg"
+    logger -t pt-usb-setup "[$DEVICE | $OPERATION] $msg"
 }
 
 is_mounted() {
@@ -62,7 +62,7 @@ umount_device() {
 
 start_miniscreen_app() {
     log "Starting miniscreen application..."
-    # TODO: start miniscreen app
+    systemctl start pt-usb-setup
 }
 
 has_pitop_offline_setup_files() {
@@ -83,11 +83,16 @@ has_valid_format() {
     return 0
 }
 
+remove_systemd_drop_in() {
+  rm -rf /lib/systemd/system/pt-usb-setup.service.d/*.conf
+}
+
 handle_add() {
     mount_device "${MOUNT_POINT}"
 
     if has_pitop_offline_setup_files; then
         remount_to_final_location
+        remove_systemd_drop_in
         start_miniscreen_app
     else
         log "Nothing to do with device ${DEVICE}; exiting ..."
