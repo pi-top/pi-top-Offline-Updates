@@ -26,11 +26,8 @@ def systemctl(command: str, name: str, timeout=10) -> Optional[str]:
 
 def close_app() -> None:
     # TODO: umount
-    if systemctl("is-active", "pt-usb-setup") == "active":
-        systemctl("stop", "pt-usb-setup")
-    else:
-        # DEBUG: Called when using the application in a virtual environment
-        raise_signal(SIGTERM)
+    systemctl("stop", "'pt-usb-setup@*'")
+    systemctl("stop", "pt-usb-setup")
 
 
 def get_tar_gz_extracted_size(file: str) -> int:

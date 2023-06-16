@@ -23,6 +23,7 @@ from pi_top_usb_setup.utils import (
     extract_file,
     get_package_version,
     get_tar_gz_extracted_size,
+    systemctl,
 )
 
 logger = logging.getLogger(__name__)
@@ -161,22 +162,14 @@ class RunSetupPage(Component, Actionable):
             close_app()
 
     def _restart_service_and_skip_updates(self):
+        # Restarts service and skips dialog & updates
         logger.info("Package 'pi-top-usb-setup' was updated, restarting app...")
 
-        # Write unit-file drop-in to skip dialog and updates
-        content = """[Service]
-Environment="PT_USB_SETUP_SKIP_UPDATE=1"
-Environment="PT_USB_SETUP_SKIP_DIALOG=1"
-"""
-        folder = "/lib/systemd/system/pt-usb-setup.service.d"
-        file = f"{folder}/10-skip-sections.conf"
-        os.makedirs(folder, exist_ok=True)
-        with open(file, "w") as f:
-            f.write(content)
-
-        # Reload systemd and restart service
-        run_command("systemctl daemon-reload", timeout=10)
-        run_command("systemctl restart pt-usb-setup", timeout=10)
+        # Start an instance with arguments; these should be encoded
+        encoded_args = run_command("systemd-escape -- '--skip-dialog --skip-update'", timeout=5)
+        systemctl("start", f"pt-usb-setup@'{encoded_args}'")
+        # Stop this instance
+        systemctl("stop", "pt-usb-setup")
 
     def render(self, image):
         offset = 5
