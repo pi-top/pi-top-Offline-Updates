@@ -1,7 +1,7 @@
 #!/bin/bash
 
-PACKAGES_FOLDER="packages"
-COMPRESSED_FILE="packages.tar.gz"
+PACKAGES_FOLDER="updates"
+COMPRESSED_FILE="updates.tar.gz"
 CURR_FOLDER="$(pwd)"
 PACKAGES_FILE="${CURR_FOLDER}/packages.list"
 
@@ -57,9 +57,9 @@ download_packages() {
 }
 
 generate_packages_apt_file() {
-    cd "${CURR_FOLDER}"
-    rm -rf "${PACKAGES_FOLDER}/Packages" "${PACKAGES_FOLDER}/Release" "${PACKAGES_FOLDER}/Packages.gz"
-    apt-ftparchive packages "${PACKAGES_FOLDER}" >"${PACKAGES_FOLDER}/Packages"
+    cd "${PACKAGES_FOLDER}"
+    rm -rf Packages Release Packages.gz
+    apt-ftparchive packages . > Packages
     apt-ftparchive \
         -o APT::FTPArchive::Release::Origin="pi-top-offline" \
         -o APT::FTPArchive::Release::Label="pi-top Offline Repository" \
@@ -67,7 +67,7 @@ generate_packages_apt_file() {
         -o APT::FTPArchive::Release::Architectures="armhf arm64 amd64 all" \
         -o APT::FTPArchive::Release::Components="main" \
         -o APT::FTPArchive::Release::Description="pi-top offline repository" \
-        release "${PACKAGES_FOLDER}" >"${PACKAGES_FOLDER}/Release"
+        release . > Release
 }
 
 compress_folder() {

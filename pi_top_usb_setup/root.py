@@ -9,7 +9,7 @@ from pt_miniscreen.core.utils import apply_layers, layer
 from pt_miniscreen.utils import ButtonEvents
 
 from pi_top_usb_setup.pages import ConfirmSetupPage, RunSetupPage
-from pi_top_usb_setup.utils import close_app
+from pi_top_usb_setup.utils import close_app, umount_usb_drive
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +24,15 @@ class RootComponent(Component):
 
         def on_cancel():
             logger.info("User cancelled, exiting...")
+            umount_usb_drive(os.environ.get("PT_USB_SETUP_MOUNT_POINT", ""))
             close_app()
 
         self.stack = self.create_child(Stack)
 
         if os.environ.get("PT_USB_SETUP_SKIP_DIALOG") == "1":
+            logger.info(
+                "Skipping confirmation dialog; script called with --skip-dialog"
+            )
             self.stack.push(partial(RunSetupPage))
         else:
             self.stack.push(

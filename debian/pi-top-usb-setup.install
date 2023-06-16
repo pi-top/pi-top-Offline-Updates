@@ -1,1 +1,1 @@
-debian/extra/99-usb-drive-for-pitop-setup.rules            /lib/udev/rules.d/
+extra/99-usb-drive-for-pitop-setup.rules            /lib/udev/rules.d/

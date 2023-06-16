@@ -18,19 +18,27 @@ log() {
 }
 
 is_mounted() {
-    return $(mount | grep -qs "${DEVICE_NAME}")
+    return $(mount | grep -qs "${DEVICE}")
+}
+
+get_mount_point() {
+    if is_mounted "${DEVICE_NAME}"; then
+        echo $(mount | grep -s "${DEVICE}" | awk '{print $3}')
+    else
+        echo "/tmp/${DEVICE_NAME}"
+    fi
 }
 
 mount_device() {
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Device ${DEVICE} is already mounted in ${MOUNT_POINT}, skipping mount"
+        return
+    fi
+
     MOUNT_DST=${1:-}
     if [ -z "${MOUNT_DST}" ]; then
         log "No mount destination provided, exiting..."
         exit 1
-    fi
-
-    if is_mounted "${DEVICE_NAME}"; then
-        log "Device ${DEVICE} is already mounted, skipping mount"
-        return
     fi
 
     log "Mounting ${DEVICE} into ${MOUNT_DST}"
@@ -40,76 +48,70 @@ mount_device() {
 }
 
 umount_device() {
-    MOUNT_DST=${1:-}
-    if [ -z "${MOUNT_DST}" ]; then
-        log "No umount destination provided, exiting..."
-        exit 1
-    fi
-
     if is_mounted "${DEVICE_NAME}"; then
-        log "Unmounting ${MOUNT_DST}..."
-        sync
-        umount "${MOUNT_DST}"
+        log "Unmounting ${MOUNT_POINT}..."
+        umount "${MOUNT_POINT}"
     else
         log "Device ${DEVICE} is not mounted, skipping unmount"
-    fi
-
-    if [ -d "${MOUNT_DST}" ]; then
-        log "Removing ${MOUNT_DST}..."
-        rm -rf "${MOUNT_DST}"
     fi
 }
 
 start_miniscreen_app() {
     log "Starting miniscreen application..."
-    systemctl start pt-usb-setup
+    ESCAPED_MOUNT_POINT_ARG=$(systemd-escape -- $MOUNT_POINT)
+    systemctl start pt-usb-setup@"$ESCAPED_MOUNT_POINT_ARG".service
 }
 
 has_pitop_offline_setup_files() {
-    if [ -f "${MOUNT_POINT}/pitop-usb-setup.tar.gz" ]; then
+    if [ -f "${MOUNT_POINT}/pi-top-usb-setup.tar.gz" ] || [ -f "${MOUNT_POINT}/pi-top-usb-setup/updates.tar.gz" ] || [ -d "${MOUNT_POINT}/pi-top-usb-setup/updates" ]; then
         return 0
     fi
     return 1
-}
-
-remount_to_final_location() {
-    # Remount to location where our offline apt source will look for updates
-    umount_device "${MOUNT_POINT}"
-    mount_device "${FINAL_MOUNT_POINT}"
-}
-
-has_valid_format() {
-    # TODO: check if device has a valid format
-    return 0
 }
 
 handle_add() {
     mount_device "${MOUNT_POINT}"
 
     if has_pitop_offline_setup_files; then
-        remount_to_final_location
         start_miniscreen_app
     else
         log "Nothing to do with device ${DEVICE}; exiting ..."
-        umount_device "${MOUNT_POINT}"
     fi
 }
 
-OPERATION="${1}"
-DEVICE="${2}"
-FS="${3}"
 
-MOUNT_PATH="/tmp"
+udisks2_service_is_active() {
+  UDISKS_SERVICE_STATE=$(systemctl show -p ActiveState --value udisks2)
+  if [ "${UDISKS_SERVICE_STATE}" = "active" ]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+OPERATION="${1:-}"
+DEVICE="${2:-}"
+FS="${3:-}"
+
 DEVICE_NAME=$(basename "${DEVICE}")
-MOUNT_POINT="${MOUNT_PATH}/${DEVICE_NAME}"
-FINAL_MOUNT_POINT="/tmp/pitop-usb-setup"
+MOUNT_POINT=$(get_mount_point)
 
 log "$OPERATION device $DEVICE with filesystem $FS"
 
 if [ "${OPERATION}" = "add" ]; then
+    if udisks2_service_is_active; then
+      log "'udisks2' service will handle device $DEVICE mount; exiting and waiting for 'change' rule"
+    else
+      handle_add
+    fi
+elif [ "${OPERATION}" = "change" ]; then
     handle_add
 elif [ "${OPERATION}" = "removed" ]; then
-    umount_device "${MOUNT_POINT}"
+    if udisks2_service_is_active; then
+      log "'udisks2' service will handle device $DEVICE umount; exiting"
+    else
+      umount_device
+    fi
 else
     log "Operation ${OPERATION} not supported, exiting..."
 fi

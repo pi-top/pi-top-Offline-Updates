@@ -1,0 +1,59 @@
+name: Create USB setup file
+
+on:
+  pull_request:
+  push:
+    paths:
+      - .github/workflows/create-usb-setup-file.yml
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  create-usb-setup-file:
+    runs-on: ubuntu-20.04
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: GitHub Environment Variables Action
+        uses: FranzDiebold/github-env-vars-action@v2.7.0
+
+      - name: Authenticate with GCP
+        uses: "google-github-actions/auth@v1.1.1"
+        with:
+          credentials_json: ${{ secrets.WEB_GCR_UPLOAD_KEY }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v1'
+        with:
+          version: '>= 363.0.0'
+
+      - name: Download updates file from GCS
+        run: |
+          gsutil cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
+
+      - name: Prepare folder structure
+        run: |
+          mkdir -p pi-top-usb-setup
+          mv updates.tar.gz pi-top-usb-setup/
+          tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
+          ls -lhR
+
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v1.0.3
+        if: github.ref == 'refs/heads/master'
+        with:
+          path: "."
+          glob: "pi-top-usb-setup.tar.gz"
+          parent: false
+          destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: pi-top-usb-setup
+          path: |
+            pi-top-usb-setup.tar.gz

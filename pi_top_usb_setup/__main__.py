@@ -1,13 +1,12 @@
 import logging
 import os
-from pathlib import Path
 from signal import pause
 
 import click
 import click_logging
 
 from .app import UsbSetupApp
-from .common import COMPRESSED_SETUP_FILE
+from .utils import AppPaths
 
 logger = logging.getLogger()
 click_logging.basic_config(logger)
@@ -16,17 +15,22 @@ click_logging.basic_config(logger)
 @click.command()
 @click_logging.simple_verbosity_option(logger)
 @click.version_option()
+@click.argument("mount_point", type=click.Path(exists=True))
 @click.option("--skip-dialog", is_flag=True)
 @click.option("--skip-update", is_flag=True)
-def main(skip_dialog, skip_update) -> None:
-    if not Path(COMPRESSED_SETUP_FILE).exists():
-        logger.warning(f"File {COMPRESSED_SETUP_FILE} not found, exiting ...")
+def main(mount_point, skip_dialog, skip_update) -> None:
+    try:
+        AppPaths(mount_point)
+    except Exception as e:
+        logger.error(f"{e}")
         return
 
     if skip_dialog:
         os.environ["PT_USB_SETUP_SKIP_DIALOG"] = "1"
     if skip_update:
         os.environ["PT_USB_SETUP_SKIP_UPDATE"] = "1"
+    if mount_point:
+        os.environ["PT_USB_SETUP_MOUNT_POINT"] = mount_point
 
     app = UsbSetupApp()
     app.start()
