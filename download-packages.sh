@@ -68,6 +68,10 @@ generate_packages_apt_file() {
         -o APT::FTPArchive::Release::Components="main" \
         -o APT::FTPArchive::Release::Description="pi-top offline repository" \
         release . > Release
+
+    # Change Release file date to the past to avoid errors on devices
+    # where date is not synchronized
+    sed -i "s|Date: .*|Date: $(date -R -u -d '2000-01-01')|g" Release
 }
 
 compress_folder() {

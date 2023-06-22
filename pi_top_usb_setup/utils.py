@@ -26,7 +26,7 @@ def systemctl(command: str, name: str, timeout=10) -> Optional[str]:
 
 
 def umount_usb_drive(mount_point: str) -> None:
-    logger.info("Umounting USB drive at {mount_point}")
+    logger.info(f"Umounting USB drive at {mount_point}")
 
     if not Path(mount_point).exists():
         logger.warning(f"Can't umount {mount_point}: destination doesn't exist")
