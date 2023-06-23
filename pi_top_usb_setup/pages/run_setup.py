@@ -163,7 +163,7 @@ class RunSetupPage(Component, Actionable):
                         env["DEBIAN_FRONTEND"] = "noninteractive"
                         return env
 
-                    exit_code = process.run(env=updates_env())
+                    exit_code = process.run(environment=updates_env())
                     if exit_code != 0:
                         raise Exception(
                             f"Command '{cmd}' exited with code '{exit_code}'"
