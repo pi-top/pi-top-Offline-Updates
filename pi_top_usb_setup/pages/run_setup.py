@@ -151,13 +151,19 @@ class RunSetupPage(Component, Actionable):
                 ),
                 (
                     RunStates.INSTALLING_UPDATES,
-                    f'sudo apt-get upgrade -y -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
+                    f'sudo apt-get dist-upgrade -y -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
                 ),
             ):
                 try:
                     self.state.update({"run_state": run_state})
                     process = ProcessLogger(cmd, timeout=3600)
-                    exit_code = process.run()
+
+                    def updates_env():
+                        env = os.environ.copy()
+                        env["DEBIAN_FRONTEND"] = "noninteractive"
+                        return env
+
+                    exit_code = process.run(env=updates_env())
                     if exit_code != 0:
                         raise Exception(
                             f"Command '{cmd}' exited with code '{exit_code}'"

@@ -8,7 +8,7 @@ from shlex import split
 from subprocess import PIPE, Popen
 from threading import Thread, Timer
 from time import sleep
-from typing import Optional
+from typing import Dict, Optional
 
 from pitop.common.command_runner import run_command
 
@@ -141,14 +141,14 @@ class ProcessLogger:
         self._process: Optional[Popen] = None
         self._log_queue: Queue = Queue()
 
-    def run(self) -> int:
+    def run(self, environment: Optional[Dict] = None) -> int:
         """Run command and wait for it to finish"""
         logging.info(f"Executing '{self.run_command}' with timeout {self.timeout}")
         self._process = Popen(
             split(self.run_command),
             stdout=PIPE,
             stderr=PIPE,
-            env=os.environ,
+            env=environment if environment else os.environ,
             text=True,
         )
 
