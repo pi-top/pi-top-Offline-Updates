@@ -14,6 +14,7 @@ from pt_miniscreen.core.utils import apply_layers, layer
 from pi_top_usb_setup.utils import (
     AppPaths,
     OfflineAptSource,
+    ProcessLogger,
     close_app,
     drive_has_enough_free_space,
     extract_file,
@@ -128,36 +129,44 @@ class RunSetupPage(Component, Actionable):
             return
 
         version_before_update = get_package_version("pi-top-usb-setup")
-        with OfflineAptSource(self.paths.UPDATES_FOLDER) as apt_source:
-            self._run_system_update(apt_source)
+        self._run_system_update()
         version_after_update = get_package_version("pi-top-usb-setup")
 
         # Restart service if it was updated
         if version_before_update != version_after_update:
             self._restart_service_and_skip_updates()
 
-    def _run_system_update(self, apt_source: str):
+    def _run_system_update(self):
         logger.info("Starting system update")
-        for run_state, cmd in (
-            (
-                RunStates.UPDATING_SOURCES,
-                f'sudo apt-get update -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
-            ),
-            (
-                RunStates.INSTALLING_UPDATES,
-                f'sudo apt upgrade -y -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
-            ),
-        ):
-            try:
-                logger.info(f"Updating packages: executing '{cmd}'")
-                self.state.update({"run_state": run_state})
-                output = run_command(cmd, timeout=60, check=False)
-                logger.info(output)
-            except Exception as e:
-                self.state.update(
-                    {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
-                )
-                raise Exception(f"Update Error: {e}")
+
+        with OfflineAptSource(self.paths.UPDATES_FOLDER) as apt_source:
+            for run_state, cmd in (
+                (
+                    RunStates.UPDATING_SOURCES,
+                    f'sudo apt-get update -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
+                ),
+                (
+                    RunStates.INSTALLING_UPDATES,
+                    f'sudo apt list --upgradable -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
+                ),
+                (
+                    RunStates.INSTALLING_UPDATES,
+                    f'sudo apt-get upgrade -y -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
+                ),
+            ):
+                try:
+                    self.state.update({"run_state": run_state})
+                    process = ProcessLogger(cmd, timeout=3600)
+                    exit_code = process.run()
+                    if exit_code != 0:
+                        raise Exception(
+                            f"Command '{cmd}' exited with code '{exit_code}'"
+                        )
+                except Exception as e:
+                    self.state.update(
+                        {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
+                    )
+                    raise Exception(f"Update Error: {e}")
 
         logger.info("Finished updating")
 

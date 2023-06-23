@@ -3,6 +3,11 @@ import os
 import shutil
 import tarfile
 from pathlib import Path
+from queue import Queue
+from shlex import split
+from subprocess import PIPE, Popen
+from threading import Thread, Timer
+from time import sleep
 from typing import Optional
 
 from pitop.common.command_runner import run_command
@@ -125,3 +130,57 @@ class OfflineAptSource:
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         self.source_path.unlink(missing_ok=True)
+
+
+class ProcessLogger:
+    """Runs a command while logging the messages that it produces"""
+
+    def __init__(self, run_command: str, timeout: int) -> None:
+        self.run_command = run_command
+        self.timeout = timeout
+        self._process: Optional[Popen] = None
+        self._log_queue: Queue = Queue()
+
+    def run(self) -> int:
+        """Run command and wait for it to finish"""
+        logging.info(f"Executing '{self.run_command}' with timeout {self.timeout}")
+        self._process = Popen(
+            split(self.run_command),
+            stdout=PIPE,
+            stderr=PIPE,
+            env=os.environ,
+            text=True,
+        )
+
+        # Handle stream messages produced by self._process
+        def queue_logs(stream):
+            for line in iter(stream.readline, ""):
+                self._log_queue.put(line)
+            stream.close()
+
+        Thread(target=queue_logs, args=[self._process.stdout], daemon=True).start()
+        Thread(target=queue_logs, args=[self._process.stderr], daemon=True).start()
+
+        # Logs messages produced by streams in the background
+        def log():
+            while self._process or not self._log_queue.empty():
+                try:
+                    message = self._log_queue.get_nowait()
+                    logging.info(f"{message}")
+                except Exception:
+                    sleep(0.5)
+
+        Thread(target=log, daemon=True).start()
+
+        # Handle timeout
+        def terminate(process):
+            logger.warning(f"Process timed out: '{self.run_command}'; terminating")
+            process.terminate()
+
+        Timer(self.timeout, terminate, [self._process]).start()
+
+        # Wait for process to exit/timeout and return
+        exit_code = self._process.wait()
+        logger.info(f"Command exited with code {exit_code}")
+        self.process = None
+        return exit_code
