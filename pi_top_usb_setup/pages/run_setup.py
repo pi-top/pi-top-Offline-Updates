@@ -29,6 +29,27 @@ logger = logging.getLogger(__name__)
 FONT_SIZE = 14
 
 
+class TextWithDots:
+    """Returns the provided text followed by a set of max 3 dots; the number of dots
+    changes each time the text is printed, providing a sense of animation.
+    The length of the printed string is always the same so that it's position on the miniscreen doesn't change.
+    """
+
+    def __init__(self, text):
+        self.base = text
+        self.dots = "..."
+
+    def __repr__(self):
+        dots = self.dots.strip()
+        if len(dots) == 3:
+            dots = "."
+        else:
+            dots += "."
+        # Fill with spaces if necessary
+        self.dots = dots + (3 - len(dots)) * " "
+        return f"{self.base} {self.dots}"
+
+
 # Use enum value to represent 'starting' progress %
 class RunStates(Enum):
     ERROR = -1
@@ -66,6 +87,7 @@ class RunSetupPage(Component, Actionable):
             logger.error(f"{e}")
             raise e
 
+        self._wait_text = TextWithDots("Please wait")
         self.text_component = self.create_child(
             Text,
             text=self._text(),
@@ -197,18 +219,18 @@ class RunSetupPage(Component, Actionable):
     def _text(self):
         run_state = self.state.get("run_state")
         if run_state == RunStates.DONE:
-            return "Device setup is complete; Press the select button to exit ..."
+            return "Device setup is complete; Press the select button to exit."
         elif run_state == RunStates.ERROR:
             error = self.state.get("error")
             if error == AppErrors.NOT_ENOUGH_SPACE:
                 return "The pi-top doesn't have enough free space."
-            return "There was an error. Press the select button to exit ..."
+            return "There was an error. Press the select button to exit."
 
         # If the USB device is still connected ...
         if Path(self.device).exists():
             return "You can remove the USB drive; the setup process will continue ..."
 
-        return "Please wait ..."
+        return str(self._wait_text)
 
     def perform_action(self):
         run_state = self.state.get("run_state")
