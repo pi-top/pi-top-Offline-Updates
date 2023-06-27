@@ -20,7 +20,7 @@ Depends:
  mount,
  udev,
 # provides 'findmnt' to find the device mounted in a folder
- util-linux,
+ util-linux (>=2.36.1),
 Description: pi-top USB Configuration Tool
  Easily configure a pi-top device using a USB drive.
  .
