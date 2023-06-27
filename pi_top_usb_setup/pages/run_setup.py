@@ -59,6 +59,9 @@ class RunSetupPage(Component, Actionable):
         try:
             mount_point = os.environ["PT_USB_SETUP_MOUNT_POINT"]
             self.paths = AppPaths(mount_point)
+            self.device = run_command(
+                f"findmnt -n -o SOURCE --target {mount_point}", timeout=5
+            ).strip()
         except Exception as e:
             logger.error(f"{e}")
             raise e
@@ -70,7 +73,7 @@ class RunSetupPage(Component, Actionable):
             font_size=FONT_SIZE,
             align="center",
             vertical_align="center",
-            wrap=False,
+            wrap=True,
         )
         self.progress_bar = self.create_child(
             ProgressBar, progress=self._current_progress
@@ -88,7 +91,8 @@ class RunSetupPage(Component, Actionable):
                 file=self.paths.UPDATES_TAR_FILE, destination=self.paths.SETUP_FOLDER
             )
 
-            # TODO: extract USB drive
+            # Umount USB drive
+            umount_usb_drive(self.paths.MOUNT_POINT)
 
             # Try to update packages
             self._update_system()
@@ -193,12 +197,17 @@ class RunSetupPage(Component, Actionable):
     def _text(self):
         run_state = self.state.get("run_state")
         if run_state == RunStates.DONE:
-            return "Device setup\nis complete;\nPress the select\nbutton to exit ..."
+            return "Device setup is complete; Press the select button to exit ..."
         elif run_state == RunStates.ERROR:
             error = self.state.get("error")
             if error == AppErrors.NOT_ENOUGH_SPACE:
-                return "USB drive doesn't\nhave enough free\nspace"
-            return "There was an error,\n please try again"
+                return "The pi-top doesn't have enough free space."
+            return "There was an error. Press the select button to exit ..."
+
+        # If the USB device is still connected ...
+        if Path(self.device).exists():
+            return "You can remove the USB drive; the setup process will continue ..."
+
         return "Please wait ..."
 
     def perform_action(self):
@@ -209,19 +218,17 @@ class RunSetupPage(Component, Actionable):
 
     def render(self, image):
         offset = 5
-        if self.state.get("run_state") not in (RunStates.DONE, RunStates.ERROR):
+        if (
+            self.state.get("run_state") in (RunStates.DONE, RunStates.ERROR)
+            or Path(self.device).exists()
+        ):
             return apply_layers(
                 image,
                 [
                     layer(
                         self.text_component.render,
-                        size=(image.width, FONT_SIZE),
-                        pos=(0, 13),
-                    ),
-                    layer(
-                        self.progress_bar.render,
-                        size=(image.width - 2 * offset, 15),
-                        pos=(offset, 35),
+                        size=image.size,
+                        pos=(0, 0),
                     ),
                 ],
             )
@@ -230,8 +237,13 @@ class RunSetupPage(Component, Actionable):
             [
                 layer(
                     self.text_component.render,
-                    size=image.size,
-                    pos=(0, 0),
+                    size=(image.width, FONT_SIZE),
+                    pos=(0, 13),
+                ),
+                layer(
+                    self.progress_bar.render,
+                    size=(image.width - 2 * offset, 15),
+                    pos=(offset, 35),
                 ),
             ],
         )
