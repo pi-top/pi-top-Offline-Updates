@@ -8,7 +8,7 @@ from shlex import split
 from subprocess import PIPE, Popen
 from threading import Thread, Timer
 from time import sleep
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from pitop.common.command_runner import run_command
 
@@ -99,7 +99,8 @@ class AppPaths:
     def __init__(self, mount_point) -> None:
         self.MOUNT_POINT = mount_point
         self.USB_SETUP_FILE = f"{mount_point}/pi-top-usb-setup.tar.gz"
-        self.SETUP_FOLDER = f"{mount_point}/pi-top-usb-setup"
+        self.TEMP_FOLDER = "/tmp"
+        self.SETUP_FOLDER = f"{self.TEMP_FOLDER}/pi-top-usb-setup"
         self.UPDATES_TAR_FILE = f"{self.SETUP_FOLDER}/updates.tar.gz"
         self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
 
@@ -115,29 +116,20 @@ class AppPaths:
             )
 
 
-class OfflineAptSource:
-    def __init__(self, path_to_repo: str) -> None:
-        self.path = path_to_repo
-        self.source = "/tmp/offline-apt-source.list"
-        self.source_path = Path(self.source)
-        self.source_path.unlink(missing_ok=True)
+class Process:
+    """Runs a command allowing to handle stdout and stderr messages that it produces"""
 
-    def __enter__(self):
-        logger.info(f"Creating offline apt source in {self.source}")
-        with open(self.source, "w") as file:
-            file.write(f"deb [trusted=yes] file:{self.path} ./")
-        return self.source
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.source_path.unlink(missing_ok=True)
-
-
-class ProcessLogger:
-    """Runs a command while logging the messages that it produces"""
-
-    def __init__(self, run_command: str, timeout: int) -> None:
+    def __init__(
+        self,
+        run_command: str,
+        timeout: int,
+        stdout_callback: Optional[Callable] = None,
+        stderr_callback: Optional[Callable] = None,
+    ) -> None:
         self.run_command = run_command
         self.timeout = timeout
+        self.stdout_callback = stdout_callback
+        self.stderr_callback = stderr_callback
         self._process: Optional[Popen] = None
         self._log_queue: Queue = Queue()
 
@@ -153,20 +145,30 @@ class ProcessLogger:
         )
 
         # Handle stream messages produced by self._process
-        def queue_logs(stream):
+        def queue_logs(stream_name, stream):
             for line in iter(stream.readline, ""):
-                self._log_queue.put(line)
+                self._log_queue.put((stream_name, line))
             stream.close()
 
-        Thread(target=queue_logs, args=[self._process.stdout], daemon=True).start()
-        Thread(target=queue_logs, args=[self._process.stderr], daemon=True).start()
+        Thread(
+            target=queue_logs, args=["stdout", self._process.stdout], daemon=True
+        ).start()
+        Thread(
+            target=queue_logs, args=["stderr", self._process.stderr], daemon=True
+        ).start()
 
         # Logs messages produced by streams in the background
         def log():
             while self._process or not self._log_queue.empty():
                 try:
-                    message = self._log_queue.get_nowait()
-                    logging.info(f"{message}")
+                    stream, message = self._log_queue.get_nowait()
+                    try:
+                        if stream == "stdout" and callable(self.stdout_callback):
+                            self.stdout_callback(message)
+                        if stream == "stderr" and callable(self.stderr_callback):
+                            self.stderr_callback(message)
+                    except Exception as e:
+                        logger.error(f"Process user callback: {e}")
                 except Exception:
                     sleep(0.5)
 

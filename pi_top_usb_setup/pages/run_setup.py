@@ -11,10 +11,9 @@ from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Text
 from pt_miniscreen.core.utils import apply_layers, layer
 
+from pi_top_usb_setup.system_updater import SystemUpdater
 from pi_top_usb_setup.utils import (
     AppPaths,
-    OfflineAptSource,
-    ProcessLogger,
     close_app,
     drive_has_enough_free_space,
     extract_file,
@@ -30,13 +29,13 @@ logger = logging.getLogger(__name__)
 FONT_SIZE = 14
 
 
+# Use enum value to represent 'starting' progress %
 class RunStates(Enum):
     ERROR = -1
     INIT = 0
-    EXTRACTING_TAR = 1
-    UPDATING_SOURCES = 2
-    INSTALLING_UPDATES = 3
-    DONE = 4
+    EXTRACTING_TAR = 5
+    UPDATING_SYSTEM = 10
+    DONE = 100
 
 
 class AppErrors(Enum):
@@ -49,7 +48,11 @@ class AppErrors(Enum):
 class RunSetupPage(Component, Actionable):
     def __init__(self, **kwargs):
         super().__init__(
-            initial_state={"run_state": RunStates.INIT, "error": AppErrors.NONE},
+            initial_state={
+                "run_state": RunStates.INIT,
+                "error": AppErrors.NONE,
+                "apt_progress": 0,
+            },
             **kwargs,
         )
 
@@ -79,11 +82,13 @@ class RunSetupPage(Component, Actionable):
         try:
             # Extract compressed files
             self._extract_file(
-                file=self.paths.USB_SETUP_FILE, destination=self.paths.MOUNT_POINT
+                file=self.paths.USB_SETUP_FILE, destination=self.paths.TEMP_FOLDER
             )
             self._extract_file(
                 file=self.paths.UPDATES_TAR_FILE, destination=self.paths.SETUP_FOLDER
             )
+
+            # TODO: extract USB drive
 
             # Try to update packages
             self._update_system()
@@ -99,7 +104,7 @@ class RunSetupPage(Component, Actionable):
 
         # Check if there's enough free space
         if not drive_has_enough_free_space(
-            drive=self.paths.MOUNT_POINT, space=get_tar_gz_extracted_size(file)
+            drive="/", space=get_tar_gz_extracted_size(file)
         ):
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.NOT_ENOUGH_SPACE}
@@ -139,40 +144,26 @@ class RunSetupPage(Component, Actionable):
     def _run_system_update(self):
         logger.info("Starting system update")
 
-        with OfflineAptSource(self.paths.UPDATES_FOLDER) as apt_source:
-            for run_state, cmd in (
-                (
-                    RunStates.UPDATING_SOURCES,
-                    f'sudo apt-get update -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
-                ),
-                (
-                    RunStates.INSTALLING_UPDATES,
-                    f'sudo apt list --upgradable -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
-                ),
-                (
-                    RunStates.INSTALLING_UPDATES,
-                    f'sudo apt-get dist-upgrade -y -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"',
-                ),
-            ):
-                try:
-                    self.state.update({"run_state": run_state})
-                    process = ProcessLogger(cmd, timeout=3600)
+        def on_error(message):
+            logger.error(f"{message}")
 
-                    def updates_env():
-                        env = os.environ.copy()
-                        env["DEBIAN_FRONTEND"] = "noninteractive"
-                        return env
+        def on_progress(percentage):
+            self.state.update({"apt_progress": percentage})
 
-                    exit_code = process.run(environment=updates_env())
-                    if exit_code != 0:
-                        raise Exception(
-                            f"Command '{cmd}' exited with code '{exit_code}'"
-                        )
-                except Exception as e:
-                    self.state.update(
-                        {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
-                    )
-                    raise Exception(f"Update Error: {e}")
+        updater = SystemUpdater(
+            apt_repository=self.paths.UPDATES_FOLDER,
+            on_progress=on_progress,
+            on_error=on_error,
+        )
+        try:
+            self.state.update({"run_state": RunStates.UPDATING_SYSTEM})
+            updater.update()
+            updater.upgrade()
+        except Exception as e:
+            self.state.update(
+                {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
+            )
+            raise Exception(f"Update Error: {e}")
 
         logger.info("Finished updating")
 
@@ -190,7 +181,14 @@ class RunSetupPage(Component, Actionable):
         systemctl("stop", "pt-usb-setup")
 
     def _current_progress(self):
-        return self.state.get("run_state").value * 25
+        state = self.state.get("run_state")
+        value = state.value
+        if state is RunStates.UPDATING_SYSTEM:
+            # Display apt progress
+            value += (
+                self.state.get("apt_progress", 0) / 100 * (RunStates.DONE.value - value)
+            )
+        return value
 
     def _text(self):
         run_state = self.state.get("run_state")
