@@ -61,14 +61,20 @@ def get_tar_gz_extracted_size(file: str) -> int:
     return size
 
 
-def extract_file(file: str, destination: str) -> None:
+def extract_file(
+    file: str, destination: str, on_progress: Optional[Callable] = None
+) -> None:
     logger.info(f"Extracting {file} into {destination}")
     if not Path(file).exists():
         raise Exception(f"File {file} doesn't exist")
 
     os.makedirs(destination, exist_ok=True)
     with tarfile.open(file, "r:gz") as tar:
-        tar.extractall(path=destination)
+        total_items = len(tar.getmembers())
+        for i, member in enumerate(tar.getmembers()):
+            if callable(on_progress):
+                on_progress(float(i / total_items * 100.0))
+            tar.extract(member=member, path=destination)
 
 
 def drive_has_enough_free_space(drive: str, space: int) -> bool:

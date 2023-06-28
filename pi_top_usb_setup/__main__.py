@@ -5,8 +5,8 @@ from signal import pause
 import click
 import click_logging
 
-from .app import UsbSetupApp
-from .utils import AppPaths
+from pi_top_usb_setup.app import UsbSetupApp
+from pi_top_usb_setup.app_fs import AppFilesystem
 
 logger = logging.getLogger()
 click_logging.basic_config(logger)
@@ -20,7 +20,7 @@ click_logging.basic_config(logger)
 @click.option("--skip-update", is_flag=True)
 def main(mount_point, skip_dialog, skip_update) -> None:
     try:
-        AppPaths(mount_point)
+        AppFilesystem(mount_point)
     except Exception as e:
         logger.error(f"{e}")
         return

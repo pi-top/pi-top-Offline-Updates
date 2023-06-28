@@ -54,7 +54,7 @@ class RunStates(Enum):
     ERROR = -1
     INIT = 0
     EXTRACTING_TAR = 5
-    UPDATING_SYSTEM = 10
+    UPDATING_SYSTEM = 25
     DONE = 100
 
 
@@ -72,6 +72,7 @@ class RunSetupPage(Component, Actionable):
                 "run_state": RunStates.INIT,
                 "error": AppErrors.NONE,
                 "apt_progress": 0,
+                "tar_progress": 0,
             },
             **kwargs,
         )
@@ -116,7 +117,11 @@ class RunSetupPage(Component, Actionable):
     def _extract_file(self):
         self.state.update({"run_state": RunStates.EXTRACTING_TAR})
         try:
-            self.fs.extract_setup_file()
+            self.fs.extract_setup_file(
+                on_progress=lambda percentage: self.state.update(
+                    {"tar_progress": percentage}
+                )
+            )
         except NotEnoughSpaceException:
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.NOT_ENOUGH_SPACE}
@@ -164,7 +169,15 @@ class RunSetupPage(Component, Actionable):
     def _current_progress(self):
         state = self.state.get("run_state")
         value = state.value
-        if state is RunStates.UPDATING_SYSTEM:
+
+        if state is RunStates.EXTRACTING_TAR:
+            # Include tar extraction progress
+            value += (
+                self.state.get("tar_progress", 0)
+                / 100
+                * (RunStates.UPDATING_SYSTEM.value - value)
+            )
+        elif state is RunStates.UPDATING_SYSTEM:
             # Include apt progress
             value += (
                 self.state.get("apt_progress", 0) / 100 * (RunStates.DONE.value - value)
