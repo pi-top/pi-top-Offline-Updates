@@ -1,32 +1,31 @@
 import logging
 import os
 from enum import Enum
-from pathlib import Path
 from threading import Thread
 
-from pitop.common.command_runner import run_command
 from pt_miniscreen.components.mixins import Actionable
 from pt_miniscreen.components.progress_bar import ProgressBar
 from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Text
 from pt_miniscreen.core.utils import apply_layers, layer
 
+from pi_top_usb_setup.app_fs import AppFilesystem
+from pi_top_usb_setup.exceptions import (
+    ExtractionError,
+    NotAnAptRepository,
+    NotEnoughSpaceException,
+)
 from pi_top_usb_setup.system_updater import SystemUpdater
 from pi_top_usb_setup.utils import (
-    AppPaths,
     close_app,
-    drive_has_enough_free_space,
-    extract_file,
     get_package_version,
-    get_tar_gz_extracted_size,
-    systemctl,
-    umount_usb_drive,
+    restart_service_and_skip_updates,
 )
 
 logger = logging.getLogger(__name__)
 
 
-FONT_SIZE = 14
+FONT_SIZE = 12
 
 
 class TextWithDots:
@@ -78,11 +77,7 @@ class RunSetupPage(Component, Actionable):
         )
 
         try:
-            mount_point = os.environ["PT_USB_SETUP_MOUNT_POINT"]
-            self.paths = AppPaths(mount_point)
-            self.device = run_command(
-                f"findmnt -n -o SOURCE --target {mount_point}", timeout=5
-            ).strip()
+            self.fs = AppFilesystem(mount_point=os.environ["PT_USB_SETUP_MOUNT_POINT"])
         except Exception as e:
             logger.error(f"{e}")
             raise e
@@ -105,16 +100,11 @@ class RunSetupPage(Component, Actionable):
 
     def run_setup(self):
         try:
-            # Extract compressed files
-            self._extract_file(
-                file=self.paths.USB_SETUP_FILE, destination=self.paths.TEMP_FOLDER
-            )
-            self._extract_file(
-                file=self.paths.UPDATES_TAR_FILE, destination=self.paths.SETUP_FOLDER
-            )
+            # Extract compressed file
+            self._extract_file()
 
             # Umount USB drive
-            umount_usb_drive(self.paths.MOUNT_POINT)
+            self.fs.umount_usb_drive()
 
             # Try to update packages
             self._update_system()
@@ -123,94 +113,59 @@ class RunSetupPage(Component, Actionable):
         except Exception as e:
             logger.error(f"{e}")
 
-    def _extract_file(self, file: str, destination: str):
-        if not Path(file).exists():
-            logger.warning(f"File {file} doesn't exist; skipping extraction")
-            return
-
-        # Check if there's enough free space
-        if not drive_has_enough_free_space(
-            drive="/", space=get_tar_gz_extracted_size(file)
-        ):
+    def _extract_file(self):
+        self.state.update({"run_state": RunStates.EXTRACTING_TAR})
+        try:
+            self.fs.extract_setup_file()
+        except NotEnoughSpaceException:
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.NOT_ENOUGH_SPACE}
             )
-            raise Exception(f"Not enough space to extract {file} into {destination}")
-
-        self.state.update({"run_state": RunStates.EXTRACTING_TAR})
-        try:
-            extract_file(file=file, destination=destination)
-            logger.info(f"File {file} extracted; removing ...")
-            os.remove(file)
-        except Exception as e:
+            raise
+        except ExtractionError:
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.EXTRACTION}
             )
-            raise Exception(f"Error extracting '{file}': {e}")
+            raise
 
     def _update_system(self):
         if os.environ.get("PT_USB_SETUP_SKIP_UPDATE", "0") == "1":
             logger.info("Skipping system update; script called with --skip-update")
             return
 
-        if not Path(self.paths.UPDATES_FOLDER).is_dir():
-            logger.warning(
-                f"Couldn't find {self.paths.UPDATES_FOLDER}, skipping system update"
-            )
-            return
-
-        version_before_update = get_package_version("pi-top-usb-setup")
-        self._run_system_update()
-        version_after_update = get_package_version("pi-top-usb-setup")
-
-        # Restart service if it was updated
-        if version_before_update != version_after_update:
-            self._restart_service_and_skip_updates()
-
-    def _run_system_update(self):
-        logger.info("Starting system update")
-
-        def on_error(message):
-            logger.error(f"{message}")
-
-        def on_progress(percentage):
-            self.state.update({"apt_progress": percentage})
-
-        updater = SystemUpdater(
-            apt_repository=self.paths.UPDATES_FOLDER,
-            on_progress=on_progress,
-            on_error=on_error,
-        )
         try:
+            updater = SystemUpdater(
+                apt_repository=self.fs.UPDATES_FOLDER,
+                on_progress=lambda percentage: self.state.update(
+                    {"apt_progress": percentage}
+                ),
+                on_error=lambda message: logger.error(f"{message}"),
+            )
+            version_before_update = get_package_version("pi-top-usb-setup")
+            logger.info("Starting system update")
             self.state.update({"run_state": RunStates.UPDATING_SYSTEM})
             updater.update()
             updater.upgrade()
+            logger.info("Finished updating")
+        except NotAnAptRepository as e:
+            logger.warning(f"{e}")
+            return
         except Exception as e:
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
             )
             raise Exception(f"Update Error: {e}")
 
-        logger.info("Finished updating")
-
-    def _restart_service_and_skip_updates(self):
-        # Restarts service and skips dialog & updates
-        logger.info("Package 'pi-top-usb-setup' was updated, restarting app...")
-
-        # Start an instance with arguments; these should be encoded
-        encoded_args = run_command(
-            "systemd-escape -- '--skip-dialog --skip-update'", timeout=5
-        )
-        systemctl("start", f"pt-usb-setup@'{encoded_args}'")
-
-        # Stop this instance
-        systemctl("stop", "pt-usb-setup")
+        # Restart service if it was updated
+        if version_before_update != get_package_version("pi-top-usb-setup"):
+            logger.info("Package 'pi-top-usb-setup' was updated, restarting app...")
+            restart_service_and_skip_updates()
 
     def _current_progress(self):
         state = self.state.get("run_state")
         value = state.value
         if state is RunStates.UPDATING_SYSTEM:
-            # Display apt progress
+            # Include apt progress
             value += (
                 self.state.get("apt_progress", 0) / 100 * (RunStates.DONE.value - value)
             )
@@ -227,23 +182,21 @@ class RunSetupPage(Component, Actionable):
             return "There was an error. Press the select button to exit."
 
         # If the USB device is still connected ...
-        if Path(self.device).exists():
-            return "You can remove the USB drive; the setup process will continue ..."
+        if run_state == RunStates.UPDATING_SYSTEM and self.fs.usb_drive_is_present:
+            return "You can remove the USB drive; setup process will continue"
 
         return str(self._wait_text)
 
     def perform_action(self):
         run_state = self.state.get("run_state")
         if run_state in (RunStates.DONE, RunStates.ERROR):
-            umount_usb_drive(self.paths.MOUNT_POINT)
+            self.fs.umount_usb_drive()
             close_app()
 
     def render(self, image):
         offset = 5
-        if (
-            self.state.get("run_state") in (RunStates.DONE, RunStates.ERROR)
-            or Path(self.device).exists()
-        ):
+
+        if self.state.get("run_state") in (RunStates.DONE, RunStates.ERROR):
             return apply_layers(
                 image,
                 [
@@ -254,18 +207,24 @@ class RunSetupPage(Component, Actionable):
                     ),
                 ],
             )
+
+        vertical_split = 40
+        progress_bar_size = (
+            image.width - 2 * offset,
+            image.height - vertical_split - 2 * offset,
+        )
         return apply_layers(
             image,
             [
                 layer(
                     self.text_component.render,
-                    size=(image.width, FONT_SIZE),
-                    pos=(0, 13),
+                    size=(image.width, image.height - progress_bar_size[1]),
+                    pos=(0, 0),
                 ),
                 layer(
                     self.progress_bar.render,
-                    size=(image.width - 2 * offset, 15),
-                    pos=(offset, 35),
+                    size=progress_bar_size,
+                    pos=(offset, vertical_split + offset),
                 ),
             ],
         )

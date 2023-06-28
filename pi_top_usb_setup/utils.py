@@ -95,27 +95,6 @@ def get_package_version(package: str) -> str:
         return version
 
 
-class AppPaths:
-    def __init__(self, mount_point) -> None:
-        self.MOUNT_POINT = mount_point
-        self.USB_SETUP_FILE = f"{mount_point}/pi-top-usb-setup.tar.gz"
-        self.TEMP_FOLDER = "/tmp"
-        self.SETUP_FOLDER = f"{self.TEMP_FOLDER}/pi-top-usb-setup"
-        self.UPDATES_TAR_FILE = f"{self.SETUP_FOLDER}/updates.tar.gz"
-        self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
-
-        if not any(
-            [
-                Path(self.USB_SETUP_FILE).exists(),
-                Path(self.UPDATES_TAR_FILE).exists(),
-                Path(self.UPDATES_FOLDER).is_dir(),
-            ]
-        ):
-            raise Exception(
-                f"Files {self.USB_SETUP_FILE} , {self.UPDATES_TAR_FILE} or {self.UPDATES_FOLDER} not found, exiting ..."
-            )
-
-
 class Process:
     """Runs a command allowing to handle stdout and stderr messages that it produces"""
 
@@ -186,3 +165,14 @@ class Process:
         logger.info(f"Command exited with code {exit_code}")
         self.process = None
         return exit_code
+
+
+def restart_service_and_skip_updates():
+    # Start an instance with arguments; these should be encoded
+    encoded_args = run_command(
+        "systemd-escape -- '--skip-dialog --skip-update'", timeout=5
+    )
+    systemctl("start", f"pt-usb-setup@'{encoded_args}'")
+
+    # Stop this instance
+    systemctl("stop", "pt-usb-setup")

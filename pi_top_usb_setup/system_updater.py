@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
-from .utils import Process
+from pi_top_usb_setup.exceptions import NotAnAptRepository
+from pi_top_usb_setup.utils import Process
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ class SystemUpdater:
         on_error: Optional[Callable] = None,
     ) -> None:
         self.apt_repository = apt_repository
+        if self.apt_repository and not Path(self.apt_repository).exists():
+            raise NotAnAptRepository(
+                f"Couldn't find a repository in {self.apt_repository}"
+            )
         self.on_progress = on_progress
         self.on_error = on_error
 
