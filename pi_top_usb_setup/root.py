@@ -8,6 +8,7 @@ from pt_miniscreen.core.components import Stack
 from pt_miniscreen.core.utils import apply_layers, layer
 from pt_miniscreen.utils import ButtonEvents
 
+from pi_top_usb_setup.mixins import HandlesAllButtons
 from pi_top_usb_setup.pages import ConfirmSetupPage, RunSetupPage
 from pi_top_usb_setup.utils import close_app, umount_usb_drive
 
@@ -55,6 +56,9 @@ class RootComponent(Component):
         logger.info(f"Handling {button_event} for component {self.active_component}")
 
         try:
+            if isinstance(self.active_component, HandlesAllButtons):
+                self.active_component.handle_button_press()
+
             if isinstance(self.active_component, Actionable):
                 if button_event == ButtonEvents.SELECT_RELEASE:
                     self.active_component.perform_action()

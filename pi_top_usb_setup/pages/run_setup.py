@@ -3,7 +3,6 @@ import os
 from enum import Enum
 from threading import Thread
 
-from pt_miniscreen.components.mixins import Actionable
 from pt_miniscreen.components.progress_bar import ProgressBar
 from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Text
@@ -15,6 +14,7 @@ from pi_top_usb_setup.exceptions import (
     NotAnAptRepository,
     NotEnoughSpaceException,
 )
+from pi_top_usb_setup.mixins import HandlesAllButtons
 from pi_top_usb_setup.system_updater import SystemUpdater
 from pi_top_usb_setup.utils import (
     close_app,
@@ -65,7 +65,7 @@ class AppErrors(Enum):
     EXTRACTION = 3
 
 
-class RunSetupPage(Component, Actionable):
+class RunSetupPage(Component, HandlesAllButtons):
     def __init__(self, **kwargs):
         super().__init__(
             initial_state={
@@ -187,12 +187,12 @@ class RunSetupPage(Component, Actionable):
     def _text(self):
         run_state = self.state.get("run_state")
         if run_state == RunStates.DONE:
-            return "Device setup is complete; Press the select button to exit."
+            return "Device setup is complete; Press any button to exit."
         elif run_state == RunStates.ERROR:
             error = self.state.get("error")
             if error == AppErrors.NOT_ENOUGH_SPACE:
                 return "The pi-top doesn't have enough free space."
-            return "There was an error. Press the select button to exit."
+            return "There was an error. Press any button to exit."
 
         # If the USB device is still connected ...
         if run_state == RunStates.UPDATING_SYSTEM and self.fs.usb_drive_is_present:
@@ -200,7 +200,7 @@ class RunSetupPage(Component, Actionable):
 
         return str(self._wait_text)
 
-    def perform_action(self):
+    def handle_button_press(self):
         run_state = self.state.get("run_state")
         if run_state in (RunStates.DONE, RunStates.ERROR):
             self.fs.umount_usb_drive()
