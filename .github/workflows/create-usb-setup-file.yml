@@ -38,7 +38,7 @@ jobs:
       - name: Prepare folder structure
         run: |
           mkdir -p pi-top-usb-setup
-          mv updates.tar.gz pi-top-usb-setup/
+          tar -xvf updates.tar.gz -C pi-top-usb-setup/
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
 
