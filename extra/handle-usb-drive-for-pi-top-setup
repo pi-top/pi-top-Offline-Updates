@@ -80,13 +80,29 @@ handle_add() {
 }
 
 
-udisks2_service_is_active() {
+system_handles_drive_mount() {
+  # check if pcmanfm is running since it might handle mounting USB drives
+  pcmanfm_cmd=$(ps -eo args | grep -v grep | grep pcmanfm)
+  if [ -z "${pcmanfm_cmd}" ]; then
+    return 1
+  fi
+
+  # check if pcmanfm configuration handles automount
+  pcmanfm_profile=$(echo $pcmanfm_cmd | grep -o -e "--profile .*" | cut -d" " -f2)
+  pcmanfm_profile_file="/etc/xdg/pcmanfm/${pcmanfm_profile}/pcmanfm.conf"
+  if [ ! -f "${pcmanfm_profile_file}" ]; then
+    return 1
+  fi
+  grep -q "mount_on_startup=1" "${pcmanfm_profile_file}" || return 1
+  grep -q "mount_removable=1" "${pcmanfm_profile_file}" || return 1
+
+  # if it does, check if udisks2 systemd service is running
   UDISKS_SERVICE_STATE=$(systemctl show -p ActiveState --value udisks2)
   if [ "${UDISKS_SERVICE_STATE}" = "active" ]; then
     return 0
-  else
-    return 1
   fi
+
+  return 1
 }
 
 OPERATION="${1:-}"
@@ -99,16 +115,16 @@ MOUNT_POINT=$(get_mount_point)
 log "$OPERATION device $DEVICE with filesystem $FS"
 
 if [ "${OPERATION}" = "add" ]; then
-    if udisks2_service_is_active; then
-      log "'udisks2' service will handle device $DEVICE mount; exiting and waiting for 'change' rule"
+    if system_handles_drive_mount; then
+      log "System will handle device $DEVICE mount; exiting and waiting for 'change' rule"
     else
       handle_add
     fi
 elif [ "${OPERATION}" = "change" ]; then
     handle_add
 elif [ "${OPERATION}" = "removed" ]; then
-    if udisks2_service_is_active; then
-      log "'udisks2' service will handle device $DEVICE umount; exiting"
+    if system_handles_drive_mount; then
+      log "System will handle device $DEVICE umount; exiting"
     else
       umount_device
     fi
