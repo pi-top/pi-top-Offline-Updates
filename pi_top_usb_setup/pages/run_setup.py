@@ -2,7 +2,9 @@ import logging
 import os
 from enum import Enum
 from threading import Thread
+from typing import Callable
 
+from pt_miniscreen.components.mixins import HasGutterIcons
 from pt_miniscreen.components.progress_bar import ProgressBar
 from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Text
@@ -14,18 +16,13 @@ from pi_top_usb_setup.exceptions import (
     NotAnAptRepository,
     NotEnoughSpaceException,
 )
-from pi_top_usb_setup.mixins import HandlesAllButtons
 from pi_top_usb_setup.system_updater import SystemUpdater
-from pi_top_usb_setup.utils import (
-    close_app,
-    get_package_version,
-    restart_service_and_skip_updates,
-)
+from pi_top_usb_setup.utils import get_package_version, restart_service_and_skip_updates
 
 logger = logging.getLogger(__name__)
 
 
-FONT_SIZE = 12
+FONT_SIZE = 10
 
 
 class TextWithDots:
@@ -65,8 +62,9 @@ class AppErrors(Enum):
     EXTRACTION = 3
 
 
-class RunSetupPage(Component, HandlesAllButtons):
-    def __init__(self, **kwargs):
+class RunSetupPage(Component, HasGutterIcons):
+    def __init__(self, on_complete: Callable, **kwargs):
+        self.on_complete = on_complete
         super().__init__(
             initial_state={
                 "run_state": RunStates.INIT,
@@ -113,6 +111,14 @@ class RunSetupPage(Component, HandlesAllButtons):
             self.state.update({"run_state": RunStates.DONE})
         except Exception as e:
             logger.error(f"{e}")
+
+        if callable(self.on_complete):
+            message = "Device setup is complete! Press any button to exit."
+            if self.state.get("run_state") == RunStates.ERROR:
+                message = "There was an error during setup. Press any button to exit."
+                if self.state.get("error") == AppErrors.NOT_ENOUGH_SPACE:
+                    message = "There's not enough free space in your pi-top to continue. Press any button to exit"
+            self.on_complete(message)
 
     def _extract_file(self):
         self.state.update({"run_state": RunStates.EXTRACTING_TAR})
@@ -186,40 +192,14 @@ class RunSetupPage(Component, HandlesAllButtons):
 
     def _text(self):
         run_state = self.state.get("run_state")
-        if run_state == RunStates.DONE:
-            return "Device setup is complete; Press any button to exit."
-        elif run_state == RunStates.ERROR:
-            error = self.state.get("error")
-            if error == AppErrors.NOT_ENOUGH_SPACE:
-                return "The pi-top doesn't have enough free space."
-            return "There was an error. Press any button to exit."
-
         # If the USB device is still connected ...
         if run_state == RunStates.UPDATING_SYSTEM and self.fs.usb_drive_is_present:
             return "You can remove the USB drive; setup process will continue"
 
         return str(self._wait_text)
 
-    def handle_button_press(self):
-        run_state = self.state.get("run_state")
-        if run_state in (RunStates.DONE, RunStates.ERROR):
-            self.fs.umount_usb_drive()
-            close_app()
-
     def render(self, image):
         offset = 5
-
-        if self.state.get("run_state") in (RunStates.DONE, RunStates.ERROR):
-            return apply_layers(
-                image,
-                [
-                    layer(
-                        self.text_component.render,
-                        size=image.size,
-                        pos=(0, 0),
-                    ),
-                ],
-            )
 
         vertical_split = 40
         progress_bar_size = (
@@ -241,3 +221,9 @@ class RunSetupPage(Component, HandlesAllButtons):
                 ),
             ],
         )
+
+    def top_gutter_icon(self):
+        return None
+
+    def bottom_gutter_icon(self):
+        return None

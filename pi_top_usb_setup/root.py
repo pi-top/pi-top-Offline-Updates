@@ -2,26 +2,38 @@ import logging
 import os
 from functools import partial
 
-from pt_miniscreen.components.mixins import Actionable, Navigable
+from pt_miniscreen.components.mixins import Actionable, HasGutterIcons, Navigable
+from pt_miniscreen.components.right_gutter import RightGutter
 from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Stack
 from pt_miniscreen.core.utils import apply_layers, layer
 from pt_miniscreen.utils import ButtonEvents
 
 from pi_top_usb_setup.mixins import HandlesAllButtons
-from pi_top_usb_setup.pages import ConfirmSetupPage, RunSetupPage
+from pi_top_usb_setup.pages import ConfirmSetupPage, RunSetupPage, SetupStatusPage
 from pi_top_usb_setup.utils import close_app, umount_usb_drive
 
 logger = logging.getLogger(__name__)
 
 
 class RootComponent(Component):
+    right_gutter_width = 10
+    gutter_icon_padding = (3, 7)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        def on_complete(message: str):
+            logger.info(f"Setup finished with message '{message}'")
+            self.stack.push(partial(SetupStatusPage, message=message), animate=False)
+            self._set_gutter_icons()
+
         def on_confirm():
             logger.info("User confirmed, starting setup process...")
-            self.stack.push(partial(RunSetupPage))
+            self.stack.push(
+                partial(RunSetupPage, on_complete=on_complete), animate=False
+            )
+            self._set_gutter_icons()
 
         def on_cancel():
             logger.info("User cancelled, exiting...")
@@ -34,7 +46,7 @@ class RootComponent(Component):
             logger.info(
                 "Skipping confirmation dialog; script called with --skip-dialog"
             )
-            self.stack.push(partial(RunSetupPage))
+            self.stack.push(partial(RunSetupPage, on_complete=on_complete))
         else:
             self.stack.push(
                 partial(
@@ -44,6 +56,13 @@ class RootComponent(Component):
                     on_cancel=on_cancel,
                 )
             )
+
+        self.right_gutter = self.create_child(
+            RightGutter,
+            upper_icon_padding=self.gutter_icon_padding,
+            lower_icon_padding=self.gutter_icon_padding,
+        )
+        self._set_gutter_icons()
 
     @property
     def active_component(self):
@@ -81,15 +100,33 @@ class RootComponent(Component):
             logger.error(f"Error: {e}")
             if self.active_component is None:
                 self.stack.pop()
+        finally:
+            self._set_gutter_icons()
+
+    def _set_gutter_icons(self):
+        if isinstance(self.active_component, HasGutterIcons):
+            self.right_gutter.state.update(
+                {
+                    "upper_icon_path": self.active_component.top_gutter_icon(),
+                    "lower_icon_path": self.active_component.bottom_gutter_icon(),
+                }
+            )
 
     def render(self, image):
-        return apply_layers(
-            image,
-            [
-                layer(
-                    self.stack.render,
-                    size=(image.width, image.height),
-                    pos=(0, 0),
+        if isinstance(self.active_component, HasGutterIcons):
+            return apply_layers(
+                image,
+                (
+                    layer(
+                        self.stack.render,
+                        size=(image.width - self.right_gutter_width, image.height),
+                    ),
+                    layer(
+                        self.right_gutter.render,
+                        size=(self.right_gutter_width, image.height),
+                        pos=(image.size[0] - self.right_gutter_width, 0),
+                    ),
                 ),
-            ],
-        )
+            )
+
+        return self.stack.render(image)
