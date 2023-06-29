@@ -41,19 +41,31 @@ mount_device() {
         exit 1
     fi
 
-    log "Mounting ${DEVICE} into ${MOUNT_DST}"
-    mkdir -p "${MOUNT_DST}"
-    mount -t "${FS}" "${DEVICE}" "${MOUNT_DST}"
+    MOUNT_SERVICE_NAME=$(systemd-escape -p --suffix=mount "${MOUNT_DST}")
+    log "creating /lib/systemd/system/${MOUNT_SERVICE_NAME}"
+    cat <<EOF >"/lib/systemd/system/${MOUNT_SERVICE_NAME}"
+[Unit]
+Description=Mount service for $DEVICE_NAME
+
+[Mount]
+What=$DEVICE
+Where=$MOUNT_DST
+Type=$FS
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl start "${MOUNT_SERVICE_NAME}"
     log "$(ls -l "${MOUNT_DST}")"
 }
 
-umount_device() {
-    if is_mounted "${DEVICE_NAME}"; then
-        log "Unmounting ${MOUNT_POINT}..."
-        umount "${MOUNT_POINT}"
-    else
-        log "Device ${DEVICE} is not mounted, skipping unmount"
-    fi
+handle_remove() {
+  log "Cleaning up ${DEVICE_NAME} mount service"
+  MOUNT_SERVICE_NAME=$(systemd-escape -p --suffix=mount "${MOUNT_POINT}")
+  systemctl stop "${MOUNT_SERVICE_NAME}" || true
+  rm -f "/lib/systemd/system/${MOUNT_SERVICE_NAME}"
+  systemctl daemon-reload
 }
 
 start_miniscreen_app() {
@@ -124,9 +136,9 @@ elif [ "${OPERATION}" = "change" ]; then
     handle_add
 elif [ "${OPERATION}" = "removed" ]; then
     if system_handles_drive_mount; then
-      log "System will handle device $DEVICE umount; exiting"
+      log "System will handle device $DEVICE removal; exiting"
     else
-      umount_device
+      handle_remove
     fi
 else
     log "Operation ${OPERATION} not supported, exiting..."
