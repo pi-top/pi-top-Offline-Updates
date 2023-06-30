@@ -69,8 +69,14 @@ handle_remove() {
 }
 
 start_miniscreen_app() {
-    log "Starting miniscreen application..."
+    instances_running=$(ps aux | { grep /usr/bin/pt-usb-setup || true; } | { grep -v grep || true; } | wc -l)
+    if [ "${instances_running}" -ge 1 ]; then
+      log "A pt-usb-setup service is already running, skipping ..."
+      return
+    fi
+
     ESCAPED_MOUNT_POINT_ARG=$(systemd-escape -- $MOUNT_POINT)
+    log "Starting miniscreen application: pt-usb-setup@$ESCAPED_MOUNT_POINT_ARG.service"
     systemctl start pt-usb-setup@"$ESCAPED_MOUNT_POINT_ARG".service
 }
 
