@@ -52,6 +52,8 @@ class RunStates(Enum):
     INIT = 0
     EXTRACTING_TAR = 5
     UPDATING_SYSTEM = 25
+    CONFIGURING_DEVICE = 90
+    COMPLETING_ONBOARDING = 95
     DONE = 100
 
 
@@ -60,6 +62,8 @@ class AppErrors(Enum):
     NOT_ENOUGH_SPACE = 1
     UPDATE_ERROR = 2
     EXTRACTION = 3
+    CONFIGURATION_ERROR = 4
+    ONBOARDING_ERROR = 5
 
 
 class RunSetupPage(Component, HasGutterIcons):
@@ -71,6 +75,8 @@ class RunSetupPage(Component, HasGutterIcons):
                 "error": AppErrors.NONE,
                 "apt_progress": 0,
                 "tar_progress": 0,
+                "config_progress": 0,
+                "onboarding_progress": 0,
             },
             **kwargs,
         )
@@ -105,8 +111,14 @@ class RunSetupPage(Component, HasGutterIcons):
             # Umount USB drive
             self.fs.umount_usb_drive()
 
-            # Try to update packages
+            # Update packages
             self._update_system()
+
+            # Configure device
+            self._configure_device()
+
+            # Finish onboarding if necessary
+            self._complete_onboarding()
 
             self.state.update({"run_state": RunStates.DONE})
         except Exception as e:
@@ -114,11 +126,17 @@ class RunSetupPage(Component, HasGutterIcons):
 
         if callable(self.on_complete):
             message = "Device setup is complete! Press any button to exit."
-            if self.state.get("run_state") == RunStates.ERROR:
+            if self.fs.requires_reboot:
+                message = (
+                    "Device setup is complete! Press any button to reboot the device!"
+                )
+            elif self.state.get("run_state") == RunStates.ERROR:
                 message = "There was an error during setup. Press any button to exit."
                 if self.state.get("error") == AppErrors.NOT_ENOUGH_SPACE:
                     message = "There's not enough free space in your pi-top to continue. Press any button to exit"
-            self.on_complete(message)
+            self.on_complete(
+                {"message": message, "requires_reboot": self.fs.requires_reboot}
+            )
 
     def _extract_file(self):
         self.state.update({"run_state": RunStates.EXTRACTING_TAR})
@@ -172,6 +190,34 @@ class RunSetupPage(Component, HasGutterIcons):
             logger.info("Package 'pi-top-usb-setup' was updated, restarting app...")
             restart_service_and_skip_updates()
 
+    def _configure_device(self):
+        self.state.update({"run_state": RunStates.CONFIGURING_DEVICE})
+        try:
+            self.fs.configure_device(
+                on_progress=lambda percentage: self.state.update(
+                    {"config_progress": percentage}
+                ),
+            )
+        except Exception as e:
+            self.state.update(
+                {"run_state": RunStates.ERROR, "error": AppErrors.CONFIGURATION_ERROR}
+            )
+            raise Exception(f"Config Error: {e}")
+
+    def _complete_onboarding(self):
+        self.state.update({"run_state": RunStates.COMPLETING_ONBOARDING})
+        try:
+            self.fs.complete_onboarding(
+                on_progress=lambda percentage: self.state.update(
+                    {"onboarding_progress": percentage}
+                ),
+            )
+        except Exception as e:
+            self.state.update(
+                {"run_state": RunStates.ERROR, "error": AppErrors.ONBOARDING_ERROR}
+            )
+            raise Exception(f"Onboarding Error: {e}")
+
     def _current_progress(self):
         state = self.state.get("run_state")
         value = state.value
@@ -186,7 +232,21 @@ class RunSetupPage(Component, HasGutterIcons):
         elif state is RunStates.UPDATING_SYSTEM:
             # Include apt progress
             value += (
-                self.state.get("apt_progress", 0) / 100 * (RunStates.DONE.value - value)
+                self.state.get("apt_progress", 0)
+                / 100
+                * (RunStates.CONFIGURING_DEVICE.value - value)
+            )
+        elif state is RunStates.CONFIGURING_DEVICE:
+            value += (
+                self.state.get("config_progress", 0)
+                / 100
+                * (RunStates.COMPLETING_ONBOARDING.value - value)
+            )
+        elif state is RunStates.COMPLETING_ONBOARDING:
+            value += (
+                self.state.get("onboarding_progress", 0)
+                / 100
+                * (RunStates.DONE.value - value)
             )
         return value
 

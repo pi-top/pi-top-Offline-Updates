@@ -1,6 +1,7 @@
 import logging
 import os
 from functools import partial
+from typing import Dict
 
 from pt_miniscreen.components.mixins import Actionable, HasGutterIcons, Navigable
 from pt_miniscreen.components.right_gutter import RightGutter
@@ -23,9 +24,15 @@ class RootComponent(Component):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        def on_complete(message: str):
-            logger.info(f"Setup finished with message '{message}'")
-            self.stack.push(partial(SetupStatusPage, message=message), animate=False)
+        def on_complete(data: Dict):
+            message = data.get("message", "")
+            requires_reboot = data.get("requires_reboot", False)
+            logger.info(
+                f"Setup finished with message {message}; needs reboot: {requires_reboot}"
+            )
+            self.stack.push(
+                partial(SetupStatusPage, message, requires_reboot), animate=False
+            )
             self._set_gutter_icons()
 
         def on_confirm():
