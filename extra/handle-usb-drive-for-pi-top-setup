@@ -1,0 +1,151 @@
+#!/bin/bash
+###############################################################
+#                Unofficial 'Bash strict mode'                #
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/  #
+###############################################################
+set -euo pipefail
+IFS=$'\n\t'
+###############################################################
+
+log() {
+    if [ "$#" -gt 0 ]; then
+        msg="$1"
+    else
+        # Support reading from stdin
+        read msg
+    fi
+    logger -t pt-usb-setup "[$DEVICE | $OPERATION] $msg"
+}
+
+is_mounted() {
+    return $(mount | grep -qs "${DEVICE}")
+}
+
+get_mount_point() {
+    if is_mounted "${DEVICE_NAME}"; then
+        echo $(mount | grep -s "${DEVICE}" | awk '{print $3}')
+    else
+        echo "/tmp/${DEVICE_NAME}"
+    fi
+}
+
+mount_device() {
+    if is_mounted "${DEVICE_NAME}"; then
+        log "Device ${DEVICE} is already mounted in ${MOUNT_POINT}, skipping mount"
+        return
+    fi
+
+    MOUNT_DST=${1:-}
+    if [ -z "${MOUNT_DST}" ]; then
+        log "No mount destination provided, exiting..."
+        exit 1
+    fi
+
+    MOUNT_SERVICE_NAME=$(systemd-escape -p --suffix=mount "${MOUNT_DST}")
+    log "creating /lib/systemd/system/${MOUNT_SERVICE_NAME}"
+    cat <<EOF >"/lib/systemd/system/${MOUNT_SERVICE_NAME}"
+[Unit]
+Description=Mount service for $DEVICE_NAME
+
+[Mount]
+What=$DEVICE
+Where=$MOUNT_DST
+Type=$FS
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl start "${MOUNT_SERVICE_NAME}"
+    log "$(ls -l "${MOUNT_DST}")"
+}
+
+handle_remove() {
+  log "Cleaning up ${DEVICE_NAME} mount service"
+  MOUNT_SERVICE_NAME=$(systemd-escape -p --suffix=mount "${MOUNT_POINT}")
+  systemctl stop "${MOUNT_SERVICE_NAME}" || true
+  rm -f "/lib/systemd/system/${MOUNT_SERVICE_NAME}"
+  systemctl daemon-reload
+}
+
+start_miniscreen_app() {
+    instances_running=$(ps aux | { grep /usr/bin/pt-usb-setup || true; } | { grep -v grep || true; } | wc -l)
+    if [ "${instances_running}" -ge 1 ]; then
+      log "A pt-usb-setup service is already running, skipping ..."
+      return
+    fi
+
+    ESCAPED_MOUNT_POINT_ARG=$(systemd-escape -- $MOUNT_POINT)
+    log "Starting miniscreen application: pt-usb-setup@$ESCAPED_MOUNT_POINT_ARG.service"
+    systemctl start pt-usb-setup@"$ESCAPED_MOUNT_POINT_ARG".service
+}
+
+has_pitop_offline_setup_files() {
+    if [ -f "${MOUNT_POINT}/pi-top-usb-setup.tar.gz" ] || [ -f "${MOUNT_POINT}/pi-top-usb-setup/updates.tar.gz" ] || [ -d "${MOUNT_POINT}/pi-top-usb-setup/updates" ]; then
+        return 0
+    fi
+    return 1
+}
+
+handle_add() {
+    mount_device "${MOUNT_POINT}"
+
+    if has_pitop_offline_setup_files; then
+        start_miniscreen_app
+    else
+        log "Nothing to do with device ${DEVICE}; exiting ..."
+    fi
+}
+
+
+system_handles_drive_mount() {
+  # check if pcmanfm is running since it might handle mounting USB drives
+  pcmanfm_cmd=$(ps -eo args | grep -v grep | grep pcmanfm)
+  if [ -z "${pcmanfm_cmd}" ]; then
+    return 1
+  fi
+
+  # check if pcmanfm configuration handles automount
+  pcmanfm_profile=$(echo $pcmanfm_cmd | grep -o -e "--profile .*" | cut -d" " -f2)
+  pcmanfm_profile_file="/etc/xdg/pcmanfm/${pcmanfm_profile}/pcmanfm.conf"
+  if [ ! -f "${pcmanfm_profile_file}" ]; then
+    return 1
+  fi
+  grep -q "mount_on_startup=1" "${pcmanfm_profile_file}" || return 1
+  grep -q "mount_removable=1" "${pcmanfm_profile_file}" || return 1
+
+  # if it does, check if udisks2 systemd service is running
+  UDISKS_SERVICE_STATE=$(systemctl show -p ActiveState --value udisks2)
+  if [ "${UDISKS_SERVICE_STATE}" = "active" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+OPERATION="${1:-}"
+DEVICE="${2:-}"
+FS="${3:-}"
+
+DEVICE_NAME=$(basename "${DEVICE}")
+MOUNT_POINT=$(get_mount_point)
+
+log "$OPERATION device $DEVICE with filesystem $FS"
+
+if [ "${OPERATION}" = "add" ]; then
+    if system_handles_drive_mount; then
+      log "System will handle device $DEVICE mount; exiting and waiting for 'change' rule"
+    else
+      handle_add
+    fi
+elif [ "${OPERATION}" = "change" ]; then
+    handle_add
+elif [ "${OPERATION}" = "removed" ]; then
+    if system_handles_drive_mount; then
+      log "System will handle device $DEVICE removal; exiting"
+    else
+      handle_remove
+    fi
+else
+    log "Operation ${OPERATION} not supported, exiting..."
+fi

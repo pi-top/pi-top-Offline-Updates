@@ -1,2 +1,0 @@
-SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ACTION=="add", RUN+="/usr/lib/pi-top-usb-setup/handle-usb-drive-for-pi-top-setup add $env{DEVNAME} $env{ID_FS_TYPE}"
-SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ACTION=="remove", RUN+="/usr/lib/pi-top-usb-setup/handle-usb-drive-for-pi-top-setup removed $env{DEVNAME} $env{ID_FS_TYPE}"

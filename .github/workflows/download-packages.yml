@@ -13,7 +13,7 @@ on:
 env:
   PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
   MOUNT_POINT: "/tmp/pi-top-os"
-  PACKAGES_FOLDER: "packages"
+  PACKAGES_FOLDER: "updates"
 
 jobs:
   download-packages:
@@ -42,16 +42,7 @@ jobs:
         run: |
           echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
 
-      - name: Cache pi-topOS image
-        id: pi-top-os-image-cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ${{ env.IMAGE_FILE }}
-          key: ${{ runner.os }}-${{ env.IMAGE_FILE }}
-
       - name: Download pi-topOS image
-        if: steps.pi-top-os-image-cache.outputs.cache-hit != 'true'
         run: |
           wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
@@ -61,14 +52,14 @@ jobs:
         id: cache-packages
         with:
           path: |
-            packages.tar.gz
+            updates.tar.gz
           key: ${{ runner.os }}-packages
 
       - name: Extract cached debs
         if: steps.cache-packages.outputs.cache-hit == 'true'
         run: |
           ls -lh
-          tar -xf packages.tar.gz
+          tar -xf updates.tar.gz
           ls -lh "${{ env.PACKAGES_FOLDER }}"
 
       - name: Mount OS Image root partition
@@ -96,9 +87,9 @@ jobs:
       - name: Upload as artifact
         uses: actions/upload-artifact@v3
         with:
-          name: packages
+          name: updates
           path: |
-            packages.tar.gz
+            updates.tar.gz
             packages.list
 
       - name: Authenticate with GCP
@@ -112,6 +103,6 @@ jobs:
         if: github.ref == 'refs/heads/master'
         with:
           path: "."
-          glob: "packages.tar.gz"
+          glob: "updates.tar.gz"
           parent: false
           destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
