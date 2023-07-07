@@ -1,4 +1,4 @@
-pi-top-usb-setup-src (0.0.1-2) bullseye; urgency=medium
+pi-top-usb-setup-src (0.1.0-1) bullseye; urgency=medium
 
   * Start miniscreen app if valid USB drive is mounted (#5)
   * Configure pi-top & complete onboarding (#6)
