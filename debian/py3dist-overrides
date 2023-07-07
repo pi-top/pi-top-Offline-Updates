@@ -3,3 +3,4 @@ click-logging python3-click-logging; PEP386
 pitop.common python3-pitop-common
 pitop.system python3-pitop-system
 pt_miniscreen pt-miniscreen
+pt_os_web_portal pt-os-web-portal
