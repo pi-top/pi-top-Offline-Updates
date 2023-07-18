@@ -104,7 +104,7 @@ class AppFilesystem:
             "keyboard_layout": lambda layout_and_variant_arr: set_keyboard_layout(
                 *layout_and_variant_arr
             ),
-            "registration_email": set_registration_email,
+            "email": set_registration_email,
         }
 
         logger.info(f"Configuring device using {self.DEVICE_CONFIG}")
@@ -117,8 +117,15 @@ class AppFilesystem:
                 logger.info(f"'{key}' not found in configuration file, skipping...")
                 continue
 
+            args = config.get(key)
+            if args is None:
+                logger.info(
+                    f"Arguments for '{key}' not found in configuration file, skipping..."
+                )
+                continue
+
             try:
-                logger.info(f"{key}: Executing {function} with '{config.get(key)}'")
+                logger.info(f"{key}: Executing {function} with '{args}'")
                 function(config.get(key))
                 if callable(on_progress):
                     on_progress(float(100.0 * i / len(lookup)))
