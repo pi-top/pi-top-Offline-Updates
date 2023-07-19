@@ -120,7 +120,7 @@ class AppFilesystem:
             args = config.get(key)
             if args is None:
                 logger.info(
-                    f"Arguments for '{key}' not found in configuration file, skipping..."
+                    f"Value for '{key}' not found in configuration file, skipping..."
                 )
                 continue
 
