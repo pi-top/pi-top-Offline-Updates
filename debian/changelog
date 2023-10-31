@@ -1,3 +1,11 @@
+pi-top-usb-setup-src (0.1.0-1) bullseye; urgency=medium
+
+  * Start miniscreen app if valid USB drive is mounted (#5)
+  * Configure pi-top & complete onboarding (#6)
+  * Handle 'null' values in json file (#7)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Tue, 31 Oct 2023 17:38:55 +0000
+
 pi-top-usb-setup-src (0.0.1-1) bullseye; urgency=medium
 
   * First release
