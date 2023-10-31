@@ -32,8 +32,11 @@ jobs:
           version: '>= 363.0.0'
 
       - name: Download updates file from GCS
-        run: |
-          gsutil -m cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
+        uses: nick-fields/retry@v2
+        with:
+          timeout_minutes: 30
+          max_attempts: 10
+          command: gsutil -m cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
 
       - name: Prepare folder structure
         run: |
