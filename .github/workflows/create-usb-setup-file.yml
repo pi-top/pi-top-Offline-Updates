@@ -33,7 +33,7 @@ jobs:
 
       - name: Download updates file from GCS
         run: |
-          gsutil cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
+          gsutil -m cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
 
       - name: Prepare folder structure
         run: |
