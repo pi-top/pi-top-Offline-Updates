@@ -35,7 +35,7 @@ jobs:
         uses: nick-fields/retry@v2
         with:
           timeout_minutes: 30
-          max_attempts: 10
+          max_attempts: 30
           command: gsutil -m cp "gs://${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/updates.tar.gz" .
 
       - name: Prepare folder structure
