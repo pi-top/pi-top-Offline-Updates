@@ -87,7 +87,9 @@ jobs:
       - name: Compress downloaded packages
         run: |
           mkdir -p pi-top-usb-setup
-          mv ${{ env.PACKAGES_FOLDER }} pi-top-usb-setup/
+          sudo mv ${{ env.PACKAGES_FOLDER }} pi-top-usb-setup/
+          sudo chown -R $USER:$USER pi-top-usb-setup
+          sudo chmod -R 755 pi-top-usb-setup
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
 
