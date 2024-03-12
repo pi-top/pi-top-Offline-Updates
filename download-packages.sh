@@ -45,12 +45,17 @@ download_packages() {
         DOWNLOAD_CMD="apt download ${package} &>/dev/null"
         CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
         # Retry on failure
-        while [ $? -ne 0 ]; do
-            echo "Error: ${CMD_OUTPUT}"
-            echo "Failed to download packlage ${package}. Retrying..."
+        if [ $? -ne 0 ]; then
+            echo "Failed to download package ${package}. Retrying with latest version..."
             sleep 1
-            eval "${DOWNLOAD_CMD} || true" # TODO: remove '|| true'
-        done
+
+            echo "Downloading ${package_name}..."
+            DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
+            CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
+            if [ $? -ne 0 ]; then
+                echo "Failed to download package ${package_name}. Skipping..."
+            fi
+        fi
 
     done <"${PACKAGES_FILE}"
     cd "${CURR_FOLDER}"
