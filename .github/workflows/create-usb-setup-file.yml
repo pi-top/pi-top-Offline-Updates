@@ -1,6 +1,9 @@
 name: Create USB setup file
 
 on:
+  schedule:
+    # Run every thursday at midnight
+    - cron:  '0 0 * * THU'
   pull_request:
   push:
     paths:
@@ -115,3 +118,12 @@ jobs:
           path: |
             packages.list
             pi-top-usb-setup.tar.gz
+
+      - name: Report to slack
+        if: github.ref == 'refs/heads/master' && always()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: 'C02UEAAHK3R'
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
