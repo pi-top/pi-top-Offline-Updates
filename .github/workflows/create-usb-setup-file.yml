@@ -1,6 +1,9 @@
 name: Create USB setup file
 
 on:
+  schedule:
+    # Run every thursday at midnight
+    - cron:  '0 0 * * THU'
   pull_request:
   push:
     paths:
