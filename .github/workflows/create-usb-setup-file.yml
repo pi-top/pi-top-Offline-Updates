@@ -120,11 +120,10 @@ jobs:
             pi-top-usb-setup.tar.gz
 
       - name: Report to slack
-        # if: github.ref == 'refs/heads/master' && always()
-        if: always()
+        if: github.ref == 'refs/heads/master' && always()
         uses: slackapi/slack-github-action@v1.25.0
         with:
           channel-id: 'C02UEAAHK3R'
-          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run. Status: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
