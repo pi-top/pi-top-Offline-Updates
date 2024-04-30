@@ -1,3 +1,16 @@
+pi-top-usb-setup-src (0.1.0-2) bullseye; urgency=medium
+
+  * Use -m flag to download updates in CI
+  * Retry download on error
+  * Increase retries on error
+  * Download packages and create bundle in 1 workflow (#9)
+  * Fix packages permissions on workflow (#11)
+  * Download latest version of a package on error (#12)
+  * Update USB setup file weekly (#13)
+  * Package for bookworm (#10)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Tue, 30 Apr 2024 21:12:37 +0000
+
 pi-top-usb-setup-src (0.1.0-1) bullseye; urgency=medium
 
   * Start miniscreen app if valid USB drive is mounted (#5)
