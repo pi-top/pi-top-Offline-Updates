@@ -1,3 +1,10 @@
+pi-top-usb-setup-src (0.1.0-3) bullseye; urgency=medium
+
+  * Support setup-file name variations (#14)
+  * Update bookworm from a different folder (#16)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Tue, 30 Jul 2024 14:55:36 +0000
+
 pi-top-usb-setup-src (0.1.0-2) bullseye; urgency=medium
 
   * Use -m flag to download updates in CI
