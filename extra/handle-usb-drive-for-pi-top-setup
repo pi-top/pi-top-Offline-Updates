@@ -81,7 +81,13 @@ start_miniscreen_app() {
 }
 
 has_pitop_offline_setup_files() {
-    if [ -f "${MOUNT_POINT}/pi-top-usb-setup.tar.gz" ] || [ -f "${MOUNT_POINT}/pi-top-usb-setup/updates.tar.gz" ] || [ -d "${MOUNT_POINT}/pi-top-usb-setup/updates" ]; then
+    # look for setup files
+    if find "${MOUNT_POINT}" -maxdepth 1 -type f -name "pi-top-usb-setup*.tar.gz"| grep -q .; then
+        return 0
+    fi
+
+    # look for already extracted content
+    if [ -f "${MOUNT_POINT}/pi-top-usb-setup/updates.tar.gz" ] || [ -d "${MOUNT_POINT}/pi-top-usb-setup/updates" ]; then
         return 0
     fi
     return 1
