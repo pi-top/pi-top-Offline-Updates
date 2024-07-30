@@ -19,6 +19,8 @@ env:
   PACKAGES_FOLDER: "updates"
 
 jobs:
+  # TODO: add job to download packages for bookworm once the OS image is out
+  # bookworm updates should be in a folder called 'updates_bookworm'
   download-packages:
     runs-on: ubuntu-20.04
 

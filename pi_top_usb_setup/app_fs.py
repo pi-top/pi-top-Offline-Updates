@@ -1,6 +1,7 @@
 import json
 import logging
 from pathlib import Path
+from subprocess import PIPE, Popen
 from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
@@ -30,6 +31,14 @@ from pi_top_usb_setup.utils import (
     umount_usb_drive,
 )
 
+
+def get_linux_distro():
+    cmd = "grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2"
+    process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    stdout, _ = process.communicate()
+    return stdout.decode().strip()
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +51,10 @@ class AppFilesystem:
         self.USB_SETUP_FILE = f"{mount_point}/pi-top-usb-setup.tar.gz"
         self.SETUP_FOLDER = f"{self.TEMP_FOLDER}/pi-top-usb-setup"
         self.DEVICE_CONFIG = f"{self.SETUP_FOLDER}/pi-top_config.json"
+
         self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
+        if get_linux_distro() == "bookworm":
+            self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates_bookworm"
 
         if not any(
             [
