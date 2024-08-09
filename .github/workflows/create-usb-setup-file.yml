@@ -103,8 +103,64 @@ jobs:
           sudo mv ${{ matrix.PACKAGES_FOLDER_NAME }} pi-top-usb-setup/
           sudo chown -R $USER:$USER pi-top-usb-setup
           sudo chmod -R 755 pi-top-usb-setup
+          tar -czvf pi-top-usb-setup-${{ matrix.DISTRO }}.tar.gz pi-top-usb-setup
+          ls -lhR
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: files-${{ matrix.DISTRO }}
+          path: |
+            packages.list
+            pi-top-usb-setup*.tar.gz
+
+      - name: Authenticate with GCP
+        uses: "google-github-actions/auth@v1.1.1"
+        if: github.ref == 'refs/heads/master'
+        with:
+          credentials_json: ${{ secrets.WEB_GCR_UPLOAD_KEY }}
+
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v1.0.3
+        if: github.ref == 'refs/heads/master'
+        with:
+          path: "."
+          glob: "pi-top-usb-setup-${{ matrix.DISTRO }}.tar.gz"
+          parent: false
+          destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
+
+      - name: Report to slack
+        if: github.ref == 'refs/heads/master' && always()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: 'C02UEAAHK3R'
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for ${{ matrix.DISTRO }}.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
+
+  create-combined-bundle-file:
+    runs-on: ubuntu-20.04
+    needs: [download-packages]
+    steps:
+      - name: Download artifacts from previous job
+        uses: actions/download-artifact@v4
+        with:
+            pattern: files-*
+
+      - name: Extract files and combine them
+        run: |
+          mkdir -p pi-top-usb-setup
+          tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz -C pi-top-usb-setup
+          tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz -C pi-top-usb-setup
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: files-all
+          path: |
+            pi-top-usb-setup.tar.gz
 
       - name: Authenticate with GCP
         uses: "google-github-actions/auth@v1.1.1"
@@ -121,19 +177,11 @@ jobs:
           parent: false
           destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
 
-      - name: Upload as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: files
-          path: |
-            packages.list
-            pi-top-usb-setup.tar.gz
-
       - name: Report to slack
         if: github.ref == 'refs/heads/master' && always()
         uses: slackapi/slack-github-action@v1.25.0
         with:
           channel-id: 'C02UEAAHK3R'
-          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for combined bundle.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
