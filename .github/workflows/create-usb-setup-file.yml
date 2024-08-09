@@ -14,15 +14,23 @@ on:
   workflow_dispatch:
 
 env:
-  PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
   MOUNT_POINT: "/tmp/pi-top-os"
-  PACKAGES_FOLDER: "updates"
 
 jobs:
-  # TODO: add job to download packages for bookworm once the OS image is out
-  # bookworm updates should be in a folder called 'updates_bookworm'
   download-packages:
     runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - DISTRO: "bullseye"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
+            PACKAGES_FOLDER_NAME: "updates"
+            COMPRESSED_UPDATES_FILENAME: "updates.tar.gz"
+          - DISTRO: "bookworm"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bookworm/pi-topOS_bookworm_release_armhf_2024-08-06_B62.zip"
+            PACKAGES_FOLDER_NAME: "updates_bookworm"
+            COMPRESSED_UPDATES_FILENAME: "updates_bookworm.tar.gz"
 
     permissions:
       contents: "read"
@@ -45,11 +53,11 @@ jobs:
 
       - name: Get pi-topOS image filename
         run: |
-          echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
+          echo "IMAGE_FILE=$(basename ${{ matrix.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
 
       - name: Download pi-topOS image
         run: |
-          wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
+          wget "${{ matrix.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
 
       - name: Cache packages
@@ -57,15 +65,15 @@ jobs:
         id: cache-packages
         with:
           path: |
-            updates.tar.gz
-          key: ${{ runner.os }}-packages
+            "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
+          key: ${{ runner.os }}-packages-${{ matrix.DISTRO }}
 
       - name: Extract cached debs
         if: steps.cache-packages.outputs.cache-hit == 'true'
         run: |
           ls -lh
-          tar -xf updates.tar.gz
-          ls -lh "${{ env.PACKAGES_FOLDER }}"
+          tar -xf "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
+          ls -lh "${{ matrix.PACKAGES_FOLDER_NAME }}"
 
       - name: Mount OS Image root partition
         uses: jcapona/mount-image-partition-action@v0.3
@@ -82,17 +90,17 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
             cd /packages
             ls -lh
-            bash ./download-packages.sh
+            bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
           EOF
 
       - name: List downloaded packages
         run: |
-          ls -lh "${{ env.PACKAGES_FOLDER }}"
+          ls -lh "${{ matrix.PACKAGES_FOLDER_NAME }}"
 
       - name: Compress downloaded packages
         run: |
           mkdir -p pi-top-usb-setup
-          sudo mv ${{ env.PACKAGES_FOLDER }} pi-top-usb-setup/
+          sudo mv ${{ matrix.PACKAGES_FOLDER_NAME }} pi-top-usb-setup/
           sudo chown -R $USER:$USER pi-top-usb-setup
           sudo chmod -R 755 pi-top-usb-setup
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-PACKAGES_FOLDER="updates"
-COMPRESSED_FILE="updates.tar.gz"
+PACKAGES_FOLDER="${1:-updates}"
+COMPRESSED_FILE="${2:-updates.tar.gz}"
 CURR_FOLDER="$(pwd)"
 PACKAGES_FILE="${CURR_FOLDER}/packages.list"
 
