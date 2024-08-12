@@ -20,43 +20,52 @@ generate_packages_list() {
     cat "${PACKAGES_FILE}"
 }
 
+download_package() {
+    package="${1}"
+
+    package_name=$(echo "${package}" | cut -d '=' -f 1)
+    package_version=$(echo "${package}" | cut -d '=' -f 2)
+
+    # Handle already downloaded packages
+    downloaded_file=$(find . -name "${package_name}_*.deb")
+    if [ -f "${downloaded_file}" ]; then
+        # TODO: this verification won't work with files that have encoded some characters in the name
+        # eg: version is '1:5.8.1+dfsg-2' but filename has '1%3a5.8.1+dfsg-2'
+        downloaded_file_has_correct_version=$(echo "${downloaded_file}" | grep "${package_version}" || true)
+        if [ -n "${downloaded_file_has_correct_version}" ]; then
+            echo "Package ${package_name} already downloaded with version ${package_version}: ${downloaded_file}. Skipping..."
+            continue
+        else
+            echo "Older version for package ${package_name} found: ${downloaded_file}. Removing..."
+            rm -f "${downloaded_file}"
+        fi
+    fi
+
+    echo "Downloading ${package}..."
+    DOWNLOAD_CMD="apt download ${package} &>/dev/null"
+    CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
+    # Retry on failure
+    if [ $? -ne 0 ]; then
+        echo "Failed to download package ${package}. Retrying with latest version..."
+        sleep 1
+
+        echo "Downloading ${package_name}..."
+        DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
+        CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
+        if [ $? -ne 0 ]; then
+            echo "Failed to download package ${package_name}. Skipping..."
+        fi
+    fi
+}
+
 download_packages() {
     cd "${PACKAGES_FOLDER}"
     while IFS= read -r package; do
-        package_name=$(echo "${package}" | cut -d '=' -f 1)
-        package_version=$(echo "${package}" | cut -d '=' -f 2)
-
-        # Handle already downloaded packages
-        downloaded_file=$(find . -name "${package_name}_*.deb")
-        if [ -f "${downloaded_file}" ]; then
-            # TODO: this verification won't work with files that have encoded some characters in the name
-            # eg: version is '1:5.8.1+dfsg-2' but filename has '1%3a5.8.1+dfsg-2'
-            downloaded_file_has_correct_version=$(echo "${downloaded_file}" | grep "${package_version}" || true)
-            if [ -n "${downloaded_file_has_correct_version}" ]; then
-                echo "Package ${package_name} already downloaded with version ${package_version}: ${downloaded_file}. Skipping..."
-                continue
-            else
-                echo "Older version for package ${package_name} found: ${downloaded_file}. Removing..."
-                rm -f "${downloaded_file}"
-            fi
-        fi
-
-        echo "Downloading ${package}..."
-        DOWNLOAD_CMD="apt download ${package} &>/dev/null"
-        CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
-        # Retry on failure
-        if [ $? -ne 0 ]; then
-            echo "Failed to download package ${package}. Retrying with latest version..."
-            sleep 1
-
-            echo "Downloading ${package_name}..."
-            DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
-            CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
-            if [ $? -ne 0 ]; then
-                echo "Failed to download package ${package_name}. Skipping..."
-            fi
-        fi
-
+        download_package "${package}" &
+        # Limit number of parallel downloads to 2
+        while [ $(jobs | wc -l) -ge 2 ]; do
+            sleep 0.5
+        done
     done <"${PACKAGES_FILE}"
     cd "${CURR_FOLDER}"
 }
