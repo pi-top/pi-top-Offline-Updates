@@ -150,8 +150,8 @@ jobs:
       - name: Extract files and combine them
         run: |
           mkdir -p pi-top-usb-setup
-          tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz -C pi-top-usb-setup
-          tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz -C pi-top-usb-setup
+          tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz
+          tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
 
