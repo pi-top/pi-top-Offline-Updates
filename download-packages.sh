@@ -62,8 +62,8 @@ download_packages() {
     cd "${PACKAGES_FOLDER}"
     while IFS= read -r package; do
         download_package "${package}" &
-        # Limit number of parallel downloads to 2
-        while [ $(jobs | wc -l) -ge 2 ]; do
+        # Limit number of parallel downloads to 4
+        while [ $(jobs | wc -l) -ge 4 ]; do
             sleep 0.5
         done
     done <"${PACKAGES_FILE}"

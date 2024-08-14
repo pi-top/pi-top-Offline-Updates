@@ -72,8 +72,9 @@ jobs:
         if: steps.cache-packages.outputs.cache-hit == 'true'
         run: |
           ls -lh
-          tar -xf "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
-          ls -lh "${{ matrix.PACKAGES_FOLDER_NAME }}"
+          tar -xf updates.tar.gz
+          ls -lh "${{ env.PACKAGES_FOLDER }}"
+          rm -f updates.tar.gz
 
       - name: Mount OS Image root partition
         uses: jcapona/mount-image-partition-action@v0.3
@@ -92,6 +93,11 @@ jobs:
             ls -lh
             bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
           EOF
+
+      - name: Delete OS image to save space
+        run: |
+          sudo umount "${{ env.MOUNT_POINT }}" || true
+          rm -f "${{ env.IMAGE_FILE }}"
 
       - name: List downloaded packages
         run: |
@@ -154,6 +160,7 @@ jobs:
           tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
+          rm -rf pi-top-usb-setup
 
       - name: Upload as artifact
         uses: actions/upload-artifact@v4
