@@ -4,6 +4,7 @@ PACKAGES_FOLDER="${1:-updates}"
 COMPRESSED_FILE="${2:-updates.tar.gz}"
 CURR_FOLDER="$(pwd)"
 PACKAGES_FILE="${CURR_FOLDER}/packages.list"
+ERROR_LOG="${CURR_FOLDER}/download_error.list"
 
 install_dependencies() {
     apt update
@@ -49,19 +50,20 @@ download_package() {
         echo "Failed to download package ${package}. Retrying with latest version..."
         sleep 1
 
-        echo "Downloading ${package_name}..."
         DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
         # Retry a few times before giving up
         for i in {1..10}; do
             CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
+            echo "Downloading ${package_name}, retry ${i}..."
             if [ $? -eq 0 ]; then
+                echo "Downloading ${package_name}, retry ${i}: success!"
                 break
             fi
 
             # On failure, log package name
             if [ $i -eq 10 ]; then
                 echo "Failed to download package ${package_name}. Skipping..."
-                echo "${package}" >>"${CURR_FOLDER}/failures.log"
+                echo "${package}" >>"${ERROR_LOG}"
             fi
 
             sleep 1
@@ -106,9 +108,11 @@ compress_folder() {
 }
 
 print_error_log() {
-    if [ -f "${CURR_FOLDER}/failures.log" ]; then
+    if [ -f "${ERROR_LOG}" ]; then
         echo "Failed to download the following packages:"
-        cat "${CURR_FOLDER}/failures.log"
+        cat "${ERROR_LOG}"
+    else
+        echo "All packages downloaded successfully!"
     fi
 }
 

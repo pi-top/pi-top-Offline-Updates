@@ -113,7 +113,7 @@ jobs:
         with:
           name: files-${{ matrix.DISTRO }}
           path: |
-            packages.list
+            *.list
             pi-top-usb-setup*.tar.gz
 
       - name: Authenticate with GCP
