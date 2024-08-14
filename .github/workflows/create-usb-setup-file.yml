@@ -154,7 +154,7 @@ jobs:
           mkdir -p pi-top-usb-setup
           tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz
           tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
-          rm -f files-*
+          rm -rf files-*
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
           rm -rf pi-top-usb-setup

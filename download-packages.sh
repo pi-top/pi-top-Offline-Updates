@@ -51,10 +51,21 @@ download_package() {
 
         echo "Downloading ${package_name}..."
         DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
-        CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
-        if [ $? -ne 0 ]; then
-            echo "Failed to download package ${package_name}. Skipping..."
-        fi
+        # Retry a few times before giving up
+        for i in {1..10}; do
+            CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
+            if [ $? -eq 0 ]; then
+                break
+            fi
+
+            # On failure, log package name
+            if [ $i -eq 10 ]; then
+                echo "Failed to download package ${package_name}. Skipping..."
+                echo "${package}" >>"${CURR_FOLDER}/failures.log"
+            fi
+
+            sleep 1
+        done
     fi
 }
 
@@ -94,6 +105,13 @@ compress_folder() {
     tar -czvf "${COMPRESSED_FILE}" "${PACKAGES_FOLDER}"
 }
 
+print_error_log() {
+    if [ -f "${CURR_FOLDER}/failures.log" ]; then
+        echo "Failed to download the following packages:"
+        cat "${CURR_FOLDER}/failures.log"
+    fi
+}
+
 main() {
     mkdir -p "${PACKAGES_FOLDER}"
     install_dependencies
@@ -101,6 +119,7 @@ main() {
     download_packages
     generate_packages_apt_file
     compress_folder
+    print_error_log
 }
 
 main
