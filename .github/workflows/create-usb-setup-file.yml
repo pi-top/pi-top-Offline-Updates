@@ -71,22 +71,6 @@ jobs:
           wget "${{ matrix.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
 
-      - name: Cache packages
-        uses: actions/cache@v3
-        id: cache-packages
-        with:
-          path: |
-            "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
-          key: ${{ runner.os }}-packages-${{ matrix.DISTRO }}
-
-      - name: Extract cached debs
-        if: steps.cache-packages.outputs.cache-hit == 'true'
-        run: |
-          ls -lh
-          tar -xf updates.tar.gz
-          ls -lh "${{ env.PACKAGES_FOLDER }}"
-          rm -f updates.tar.gz
-
       - name: Mount OS Image root partition
         uses: jcapona/mount-image-partition-action@v0.3
         with:
@@ -121,6 +105,7 @@ jobs:
           sudo chown -R $USER:$USER pi-top-usb-setup
           sudo chmod -R 755 pi-top-usb-setup
           tar -czvf pi-top-usb-setup-${{ matrix.DISTRO }}.tar.gz pi-top-usb-setup
+          sudo rm -rf pi-top-usb-setup
           ls -lhR
 
       - name: Upload as artifact
@@ -169,6 +154,7 @@ jobs:
           mkdir -p pi-top-usb-setup
           tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz
           tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
+          rm -f files-*
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
           rm -rf pi-top-usb-setup
