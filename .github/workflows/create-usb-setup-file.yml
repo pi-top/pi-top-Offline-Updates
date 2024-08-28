@@ -14,21 +14,40 @@ on:
   workflow_dispatch:
 
 env:
-  PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
   MOUNT_POINT: "/tmp/pi-top-os"
-  PACKAGES_FOLDER: "updates"
 
 jobs:
-  # TODO: add job to download packages for bookworm once the OS image is out
-  # bookworm updates should be in a folder called 'updates_bookworm'
   download-packages:
     runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - DISTRO: "bullseye"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
+            PACKAGES_FOLDER_NAME: "updates"
+            COMPRESSED_UPDATES_FILENAME: "updates.tar.gz"
+          - DISTRO: "bookworm"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bookworm/pi-topOS_bookworm_release_armhf_2024-08-06_B62.zip"
+            PACKAGES_FOLDER_NAME: "updates_bookworm"
+            COMPRESSED_UPDATES_FILENAME: "updates_bookworm.tar.gz"
 
     permissions:
       contents: "read"
       id-token: "write"
 
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
       - name: GitHub Environment Variables Action
         uses: FranzDiebold/github-env-vars-action@v2.7.0
 
@@ -45,27 +64,12 @@ jobs:
 
       - name: Get pi-topOS image filename
         run: |
-          echo "IMAGE_FILE=$(basename ${{ env.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
+          echo "IMAGE_FILE=$(basename ${{ matrix.PI_TOP_OS_URL }} | cut -d'.' -f1).img" >> $GITHUB_ENV
 
       - name: Download pi-topOS image
         run: |
-          wget "${{ env.PI_TOP_OS_URL }}" -O pi-topOS.zip
+          wget "${{ matrix.PI_TOP_OS_URL }}" -O pi-topOS.zip
           unzip pi-topOS.zip
-
-      - name: Cache packages
-        uses: actions/cache@v3
-        id: cache-packages
-        with:
-          path: |
-            updates.tar.gz
-          key: ${{ runner.os }}-packages
-
-      - name: Extract cached debs
-        if: steps.cache-packages.outputs.cache-hit == 'true'
-        run: |
-          ls -lh
-          tar -xf updates.tar.gz
-          ls -lh "${{ env.PACKAGES_FOLDER }}"
 
       - name: Mount OS Image root partition
         uses: jcapona/mount-image-partition-action@v0.3
@@ -82,21 +86,85 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
             cd /packages
             ls -lh
-            bash ./download-packages.sh
+            bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
           EOF
+
+      - name: Delete OS image to save space
+        run: |
+          sudo umount "${{ env.MOUNT_POINT }}" || true
+          rm -f "${{ env.IMAGE_FILE }}"
 
       - name: List downloaded packages
         run: |
-          ls -lh "${{ env.PACKAGES_FOLDER }}"
+          ls -lh "${{ matrix.PACKAGES_FOLDER_NAME }}"
 
       - name: Compress downloaded packages
         run: |
           mkdir -p pi-top-usb-setup
-          sudo mv ${{ env.PACKAGES_FOLDER }} pi-top-usb-setup/
+          sudo mv ${{ matrix.PACKAGES_FOLDER_NAME }} pi-top-usb-setup/
           sudo chown -R $USER:$USER pi-top-usb-setup
           sudo chmod -R 755 pi-top-usb-setup
+          tar -czvf pi-top-usb-setup-${{ matrix.DISTRO }}.tar.gz pi-top-usb-setup
+          sudo rm -rf pi-top-usb-setup
+          ls -lhR
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: files-${{ matrix.DISTRO }}
+          path: |
+            *.list
+            pi-top-usb-setup*.tar.gz
+
+      - name: Authenticate with GCP
+        uses: "google-github-actions/auth@v1.1.1"
+        if: github.ref == 'refs/heads/master'
+        with:
+          credentials_json: ${{ secrets.WEB_GCR_UPLOAD_KEY }}
+
+      - name: Upload to GCS
+        uses: google-github-actions/upload-cloud-storage@v1.0.3
+        if: github.ref == 'refs/heads/master'
+        with:
+          path: "."
+          glob: "pi-top-usb-setup-${{ matrix.DISTRO }}.tar.gz"
+          parent: false
+          destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
+
+      - name: Report to slack
+        if: github.ref == 'refs/heads/master' && always()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: 'C02UEAAHK3R'
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for ${{ matrix.DISTRO }}.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
+
+  create-combined-bundle-file:
+    runs-on: ubuntu-20.04
+    needs: [download-packages]
+    steps:
+      - name: Download artifacts from previous job
+        uses: actions/download-artifact@v4
+        with:
+            pattern: files-*
+
+      - name: Extract files and combine them
+        run: |
+          mkdir -p pi-top-usb-setup
+          tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz
+          tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
+          rm -rf files-*
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
           ls -lhR
+          rm -rf pi-top-usb-setup
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: files-all
+          path: |
+            pi-top-usb-setup.tar.gz
 
       - name: Authenticate with GCP
         uses: "google-github-actions/auth@v1.1.1"
@@ -113,19 +181,11 @@ jobs:
           parent: false
           destination: "${{ secrets.GCS_PACKAGES_UPLOAD_BUCKET }}/"
 
-      - name: Upload as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: files
-          path: |
-            packages.list
-            pi-top-usb-setup.tar.gz
-
       - name: Report to slack
         if: github.ref == 'refs/heads/master' && always()
         uses: slackapi/slack-github-action@v1.25.0
         with:
           channel-id: 'C02UEAAHK3R'
-          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for combined bundle.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
