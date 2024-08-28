@@ -24,7 +24,7 @@ jobs:
       matrix:
         include:
           - DISTRO: "bullseye"
-            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2023-05-23_B25.zip"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2024-08-28_B66.zip"
             PACKAGES_FOLDER_NAME: "updates"
             COMPRESSED_UPDATES_FILENAME: "updates.tar.gz"
           - DISTRO: "bookworm"
