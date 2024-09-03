@@ -1,7 +1,12 @@
+import logging
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List, Optional
-from uuid import uuid4
+
+from pi_top_usb_setup.utils import get_linux_distro
+
+logger = logging.getLogger(__name__)
+
 
 CERT_FOLDER = "/usr/local/share/ca-certificates/"
 
@@ -13,6 +18,7 @@ CERT_FOLDER = "/usr/local/share/ca-certificates/"
 class WiFiSecurityEnum(Enum):
     LEAP = auto()
     OWE = auto()
+    OPEN = auto()
     WPA_ENTERPRISE = auto()
     WPA_PERSONAL = auto()
 
@@ -51,6 +57,7 @@ class PEAPInnerAuthentication(Enum):
 #################################
 @dataclass
 class NetworkBase:
+
     def __post_init__(self):
         # Check type of dataclass fields
         for name, field_type in self.__annotations__.items():
@@ -62,27 +69,26 @@ class NetworkBase:
 
     @classmethod
     def cleanup(cls, **kwargs) -> dict:
+        # Remove any keys from kwargs that are not part of the dataclass
         return {
             key: value for key, value in kwargs.items() if key in cls.__annotations__
         }
 
-    @classmethod
-    def handle_filesystem_path_arg(cls, key: str, args: dict) -> None:
-        if key in args:
-            filename = generate_filename()
-            save_to_file(filename, args[key])
-            args[key] = filename
+    @staticmethod
+    def handle_filesystem_argument(key: str, args: dict, filename: str) -> None:
+        save_to_file(filename, content=args[key])
+        args[key] = filename
 
 
 def save_to_file(filename: str, content: str):
-    # mkdir -p /usr/local/share/ca-certificates/
-    print(f"Saving content to file: {filename}, content: {content}")
+    # run_command("mkdir -p /usr/local/share/ca-certificates/", timeout=10, check=True)
+    logger.info(f"Saving content to file: '{filename}', content: '{content}'")
     with open(filename, "w") as f:
         f.write(content)
 
 
-def generate_filename():
-    return f"{CERT_FOLDER}/pt_usb_network_{uuid4()}.crt"
+def generate_filename(id: str) -> str:
+    return f"{CERT_FOLDER}/{id}.crt"
 
 
 #################################
@@ -90,12 +96,13 @@ def generate_filename():
 #################################
 @dataclass
 class PWDAuthentication(NetworkBase):
+    id: str
     username: str
     password: Optional[str] = None
 
     @classmethod
     def from_kwargs(cls, **kwargs):
-        print(f"----------------> PWDAuthentication: {kwargs}")
+        logger.info(f"----------------> PWDAuthentication: {kwargs}")
         return PWDAuthentication(**cls.cleanup(**kwargs))
 
     def to_nmcli(self) -> str:
@@ -103,7 +110,7 @@ class PWDAuthentication(NetworkBase):
 802-1x.eap pwd \
 802-1x.identity {self.username}"
         if self.password:
-            response += f" 802-1x.password {self.password}"
+            response += f' 802-1x.password "{self.password}"'
         return response
 
     def to_wpasupplicant_conf(self) -> List:
@@ -118,6 +125,7 @@ class PWDAuthentication(NetworkBase):
 
 @dataclass
 class TLSAuthentication(NetworkBase):
+    id: str
     identity: str
     user_private_key: str
     domain: Optional[str] = None
@@ -129,12 +137,16 @@ class TLSAuthentication(NetworkBase):
 
     @classmethod
     def from_kwargs(cls, **kwargs):
-        print(f"----------------> TLSAuthentication: {kwargs}")
+        logger.info(f"----------------> TLSAuthentication: {kwargs}")
         args = cls.cleanup(**kwargs)
         # 'ca_cert' and 'user_private_key' contain keys; need to save them to files and pass the paths to the constructor
-        TLSAuthentication.handle_filesystem_path_arg("user_private_key", args)
+        NetworkBase.handle_filesystem_argument(
+            "user_private_key", args, filename=generate_filename(args.get("id"))
+        )
         if "ca_cert" in args:
-            TLSAuthentication.handle_filesystem_path_arg("ca_cert", args)
+            NetworkBase.handle_filesystem_argument(
+                "ca_cert", args, filename=generate_filename(args.get("id"))
+            )
         return TLSAuthentication(**cls.cleanup(**args))
 
     def to_nmcli(self) -> str:
@@ -147,13 +159,15 @@ class TLSAuthentication(NetworkBase):
         if self.ca_cert:
             response += f" 802-1x.ca-cert {self.ca_cert}"
         if self.ca_cert_password:
-            response += f" 802-1x.ca-cert-password {self.ca_cert_password}"
+            response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.user_cert:
             response += f" 802-1x.client-cert {self.user_cert}"
         if self.user_cert_password:
-            response += f" 802-1x.client-cert-password {self.user_cert_password}"
+            response += f' 802-1x.client-cert-password "{self.user_cert_password}"'
         if self.user_private_key_password:
-            response += f" 802-1x.private-key-password {self.user_private_key_password}"
+            response += (
+                f' 802-1x.private-key-password "{self.user_private_key_password}"'
+            )
         return response
 
     def to_wpasupplicant_conf(self) -> List:
@@ -180,6 +194,7 @@ class TLSAuthentication(NetworkBase):
 
 @dataclass
 class TTLSAuthentication(NetworkBase):
+    id: str
     anonymous_identity: str
     username: str
     inner_authentication: TTLSInnerAuthentication
@@ -189,13 +204,15 @@ class TTLSAuthentication(NetworkBase):
 
     @classmethod
     def from_kwargs(cls, **kwargs):
-        print(f"----------------> TTLSAuthentication: {kwargs}")
+        logger.info(f"----------------> TTLSAuthentication: {kwargs}")
         args = cls.cleanup(**kwargs)
         args["inner_authentication"] = TTLSInnerAuthentication[
             kwargs["inner_authentication"]
         ]
         if "ca_cert" in args:
-            TTLSAuthentication.handle_filesystem_path_arg("ca_cert", args)
+            NetworkBase.handle_filesystem_argument(
+                "ca_cert", args, filename=generate_filename(args["id"])
+            )
         return TTLSAuthentication(**args)
 
     def to_nmcli(self) -> str:
@@ -207,9 +224,9 @@ class TTLSAuthentication(NetworkBase):
         if self.ca_cert:
             response += f" 802-1x.ca-cert {self.ca_cert}"
         if self.ca_cert_password:
-            response += f" 802-1x.ca-cert-password {self.ca_cert_password}"
+            response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
-            response += f" 802-1x.password {self.password}"
+            response += f' 802-1x.password "{self.password}"'
         return response
 
     def to_wpasupplicant_conf(self) -> List:
@@ -231,6 +248,7 @@ class TTLSAuthentication(NetworkBase):
 
 @dataclass
 class PEAPAuthentication(NetworkBase):
+    id: str
     anonymous_identity: str
     username: str
     inner_authentication: PEAPInnerAuthentication
@@ -242,7 +260,7 @@ class PEAPAuthentication(NetworkBase):
 
     @classmethod
     def from_kwargs(cls, **kwargs):
-        print(f"----------------> PEAPAuthentication: {kwargs}")
+        logger.info(f"----------------> PEAPAuthentication: {kwargs}")
         args = cls.cleanup(**kwargs)
         args["inner_authentication"] = PEAPInnerAuthentication[
             kwargs.pop("inner_authentication")
@@ -250,7 +268,9 @@ class PEAPAuthentication(NetworkBase):
         peap_version = kwargs.pop("peap_version", "AUTOMATIC")
         args["peap_version"] = PEAPVersion[peap_version]
         if "ca_cert" in args:
-            PEAPAuthentication.handle_filesystem_path_arg("ca_cert", args)
+            NetworkBase.handle_filesystem_argument(
+                "ca_cert", args, filename=generate_filename(args["id"])
+            )
         return PEAPAuthentication(**args)
 
     def to_nmcli(self) -> str:
@@ -266,9 +286,9 @@ class PEAPAuthentication(NetworkBase):
         if self.ca_cert:
             response += f" 802-1x.ca-cert {self.ca_cert}"
         if self.ca_cert_password:
-            response += f" 802-1x.ca-cert-password {self.ca_cert_password}"
+            response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
-            response += f" 802-1x.password {self.password}"
+            response += f' 802-1x.password "{self.password}"'
         return response
 
     def to_wpasupplicant_conf(self) -> List:
@@ -297,12 +317,13 @@ class PEAPAuthentication(NetworkBase):
 #################################
 @dataclass
 class WpaPersonal(NetworkBase):
+    id: str
     password: str
 
     def to_nmcli(self) -> str:
-        return f"mode infa \
+        return f'mode infra \
 802-11-wireless-security.key-mgmt wpa-psk \
-802-11-wireless-security.psk {self.password}"
+802-11-wireless-security.psk "{self.password}"'
 
     def to_wpasupplicant_conf(self) -> List:
         return [
@@ -313,6 +334,7 @@ class WpaPersonal(NetworkBase):
 
 @dataclass
 class LEAP(NetworkBase):
+    id: str
     username: str
     password: Optional[str] = None
 
@@ -321,7 +343,7 @@ class LEAP(NetworkBase):
 802-11-wireless-security.key-mgmt ieee8021x \
 802-11-wireless-security.leap-username {self.username}"
         if self.password:
-            response += f"802-11-wireless-security.leap-password {self.password}"
+            response += f'802-11-wireless-security.leap-password "{self.password}"'
         return response
 
     def to_wpasupplicant_conf(self) -> List:
@@ -336,12 +358,25 @@ class LEAP(NetworkBase):
 
 
 @dataclass
-class OWE:
+class OWE(NetworkBase):
+    id: str
+
     def to_nmcli(self) -> str:
         return "802-11-wireless-security.key-mgmt OWE"
 
     def to_wpasupplicant_conf(self) -> List:
         return ["key_mgmt=OWE"]
+
+
+@dataclass
+class Open(NetworkBase):
+    id: str
+
+    def to_nmcli(self) -> str:
+        return ""
+
+    def to_wpasupplicant_conf(self) -> List:
+        return []
 
 
 @dataclass()
@@ -352,7 +387,7 @@ class WpaEnterprise(NetworkBase):
 
     @classmethod
     def from_kwargs(cls, **kwargs):
-        print(f"--------> WpaEnterprise: {kwargs}")
+        logger.info(f"--------> WpaEnterprise: {kwargs}")
         authentication_lookup = {
             WpaEnterpriseAuthentication.PWD: PWDAuthentication,
             WpaEnterpriseAuthentication.TLS: TLSAuthentication,
@@ -386,61 +421,78 @@ class Network:
     authentication: WpaPersonal | LEAP | OWE | WpaEnterprise
     hidden: bool = False
 
-    def connect(self):
-        if not (
-            isinstance(self.authentication, WpaPersonal)
-            or isinstance(self.authentication, OWE)
-        ):
-            raise NotImplementedError(
-                f"Connection type '{self.authentication}' not supported"
-            )
+    @property
+    def id(self) -> str:
+        return Network.to_id(self.ssid)
 
+    @staticmethod
+    def to_id(name) -> str:
+        return name.replace(" ", "_").replace('"', "")
+
+    def connect(self):
         from pitop.common.command_runner import run_command
 
-        # On simple networks, we'll connect using raspi-config
-        # https://www.raspberrypi.com/documentation/computers/configuration.html#system-options36
-        plain = 0
-        password = (
-            ""
-            if isinstance(self.authentication, OWE)
-            else f'"{self.authentication.password}"'
-        )
-        cmd = f'raspi-config nonint do_wifi_ssid_passphrase "{self.ssid}" {password} {int(self.hidden)} {plain}'
-        print(f"--> Connecting to network: {cmd}")
-        run_command(cmd, timeout=30, check=True)
+        # if on bookworm, use nmcli
+        if get_linux_distro() == "bookworm":
+            cmds = [
+                self.to_nmcli(),
+                f"nmcli connection up '{self.id}'",
+            ]
+            for cmd in cmds:
+                logger.info(f"--> Connecting to network: {cmd}")
+                run_command(cmd, timeout=30, check=True)
+        else:
+            cmd = self.to_wpasupplicant_conf()
+            # append to wpa_supplicant.conf
+            with open("/etc/wpa_supplicant/wpa_supplicant.conf", "a") as f:
+                f.write("\n")
+                f.write("\n".join(cmd))
+            run_command("systemctl restart wpa_supplicant", timeout=30, check=True)
+
+        # # On simple networks, we'll connect using raspi-config
+        # # https://www.raspberrypi.com/documentation/computers/configuration.html#system-options36
+        # plain = 0
+        # password = (
+        #     ""
+        #     if isinstance(self.authentication, OWE)
+        #     else f'"{self.authentication.password}"'
+        # )
+        # cmd = f'raspi-config nonint do_wifi_ssid_passphrase "{self.ssid}" {password} {int(self.hidden)} {plain}'
 
     @classmethod
     def from_dict(cls, data: dict):
-        print(f"--> Network: {data}")
+        logger.info(f"--> Network: {data}")
         return Network(
-            authentication=Network.auth_from_dict(data["authentication"]),
+            authentication=Network.get_authentication(data),
             ssid=data["ssid"],
             hidden=data.get("hidden", False),
         )
 
     @staticmethod
-    def auth_from_dict(
-        authentication_data: dict,
+    def get_authentication(
+        connection_data: dict,
     ) -> WpaPersonal | LEAP | OWE | WpaEnterprise:
         lookup = {
             WiFiSecurityEnum.LEAP: LEAP,
+            WiFiSecurityEnum.OPEN: Open,
             WiFiSecurityEnum.OWE: OWE,
             WiFiSecurityEnum.WPA_ENTERPRISE: lambda **kwargs: WpaEnterprise.from_kwargs(
                 **kwargs
             ),
             WiFiSecurityEnum.WPA_PERSONAL: WpaPersonal,
         }
-        wifi_security_enum = WiFiSecurityEnum[authentication_data.get("type", "")]
+        auth_dict = connection_data["authentication"]
+        wifi_security_enum = WiFiSecurityEnum[auth_dict["type"]]
         wifi_security_class = lookup[wifi_security_enum]
-        args = authentication_data.get("data", {})
-        print(f"----> {wifi_security_enum} with {args}")
+
         assert callable(wifi_security_class)
-        return wifi_security_class(**args)
+        return wifi_security_class(
+            **auth_dict.get("data", {}), id=Network.to_id(connection_data["ssid"])
+        )
 
     def to_nmcli(self) -> str:
-        response = (
-            f"nmcli connection add type wifi con-name {self.ssid} ssid {self.ssid}"
-        )
+        interface = "wlan0"
+        response = f'nmcli connection add type wifi ifname {interface} con-name "{self.id}" ssid "{self.ssid}"'
         if self.hidden:
             response += " 802-11-wireless.hidden yes"
         response += f" {self.authentication.to_nmcli()}"
@@ -448,6 +500,9 @@ class Network:
 
     def to_wpasupplicant_conf(self) -> str:
         response = "network {"
+        response += f'\n        ssid="{self.ssid}"'
+        if self.hidden:
+            response += "\n        scan_ssid=1"
         for line in self.authentication.to_wpasupplicant_conf():
             response += f"\n        {line}"
         response += "\n}"

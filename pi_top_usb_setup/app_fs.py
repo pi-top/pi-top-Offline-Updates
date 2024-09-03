@@ -1,7 +1,6 @@
 import json
 import logging
 from pathlib import Path
-from subprocess import PIPE, Popen
 from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
@@ -28,17 +27,10 @@ from pi_top_usb_setup.network import Network
 from pi_top_usb_setup.utils import (
     drive_has_enough_free_space,
     extract_file,
+    get_linux_distro,
     get_tar_gz_extracted_size,
     umount_usb_drive,
 )
-
-
-def get_linux_distro():
-    cmd = "grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2"
-    process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    stdout, _ = process.communicate()
-    return stdout.decode().strip()
-
 
 logger = logging.getLogger(__name__)
 
