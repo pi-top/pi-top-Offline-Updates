@@ -1,6 +1,6 @@
 import pytest
 
-from tests.data import network_data_array, nmcli_resp, wpasupplicant_resp
+from tests.data import valid_data_arr
 
 
 def test_success(mocker):
@@ -9,12 +9,10 @@ def test_success(mocker):
     )
     from pi_top_usb_setup.network import Network
 
-    for input, nmcli_r, wpasupplicant_r in zip(
-        network_data_array, nmcli_resp, wpasupplicant_resp
-    ):
-        n = Network.from_dict(input)
-        assert n.to_nmcli() == nmcli_r
-        assert n.to_wpasupplicant_conf() == wpasupplicant_r
+    for test_dict in valid_data_arr:
+        n = Network.from_dict(test_dict["network_data"])
+        assert n.to_nmcli() == test_dict["nmcli_str"]
+        assert n.to_wpasupplicant_conf() == test_dict["wpasupplicant_str"]
 
 
 def test_wrong_arguments():
@@ -60,3 +58,16 @@ def test_fails_on_missing_arguments():
     }
     with pytest.raises(TypeError):
         Network.from_dict(data)
+
+
+def test_connect_commands(mocker):
+    # check commands run when connecting to network
+    run_command_mock = mocker.patch("pi_top_usb_setup.network.run_command")
+    from pi_top_usb_setup.network import Network
+
+    for test_data in valid_data_arr:
+        n = Network.from_dict(test_data["network_data"])
+        n.connect()
+        for cmd in test_data["connect_str_arr"]:
+            run_command_mock.assert_any_call(cmd, timeout=30, check=True)
+        run_command_mock.reset_mock()

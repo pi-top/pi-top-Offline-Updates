@@ -1,4 +1,4 @@
-network_data_array = [
+connection_dict_arr = [
     {
         "ssid": "this-is-a-ssid",
         "authentication": {
@@ -71,17 +71,17 @@ network_data_array = [
     },
 ]
 
-nmcli_resp = [
+nmcli_str_arr = [
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt OWE',
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless.hidden yes 802-11-wireless-security.key-mgmt OWE',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" mode infra 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "this-is-a-password"',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" key-mgmt wpa-eap 802-1x.eap pwd 802-1x.identity this-is-a-username 802-1x.password "this-is-a-password"',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/test.crt',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap ttls 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.password "this-is-a-password"',  # noqa: E501
-    'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap peap 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.password "this-is-a-password"',  # noqa: E501
+    'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap peap 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.password "this-is-a-password"',  # noqa: E501
 ]
 
-wpasupplicant_resp = [
+wpasupplicant_str_arr = [
     """network {
         ssid="this-is-a-ssid"
         key_mgmt=OWE
@@ -129,3 +129,38 @@ wpasupplicant_resp = [
         password="this-is-a-password"
 }""",
 ]
+
+connect_cmds_arr = [
+    ['raspi-config nonint do_wifi_ssid_passphrase "this-is-a-ssid"  0 0'],
+    ['raspi-config nonint do_wifi_ssid_passphrase "this-is-a-ssid"  1 0'],
+    [
+        'raspi-config nonint do_wifi_ssid_passphrase "this-is-a-ssid" "this-is-a-password" 0 0'
+    ],
+    [
+        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" key-mgmt wpa-eap 802-1x.eap pwd 802-1x.identity this-is-a-username 802-1x.password "this-is-a-password"',  # noqa: E501
+        'nmcli connection up "this-is-a-ssid"',
+    ],
+    [
+        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/this-is-a-ssid.crt',  # noqa: E501
+        'nmcli connection up "this-is-a-ssid"',
+    ],
+    [
+        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap ttls 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.password "this-is-a-password"',  # noqa: E501
+        'nmcli connection up "this-is-a-ssid"',
+    ],
+    [
+        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap peap 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.password "this-is-a-password"',  # noqa: E501
+        'nmcli connection up "this-is-a-ssid"',
+    ],
+]
+
+valid_data_arr = []
+for i, con in enumerate(connection_dict_arr):
+    valid_data_arr.append(
+        {
+            "network_data": con,
+            "nmcli_str": nmcli_str_arr[i],
+            "wpasupplicant_str": wpasupplicant_str_arr[i],
+            "connect_str_arr": connect_cmds_arr[i],
+        }
+    )

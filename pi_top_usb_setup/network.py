@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import List, Optional
 
+from pitop.common.command_runner import run_command
+
 from pi_top_usb_setup.utils import get_linux_distro
 
 logger = logging.getLogger(__name__)
@@ -249,10 +251,10 @@ class TTLSAuthentication(NetworkBase):
 @dataclass
 class PEAPAuthentication(NetworkBase):
     id: str
-    anonymous_identity: str
     username: str
-    inner_authentication: PEAPInnerAuthentication
+    inner_authentication: PEAPInnerAuthentication = PEAPInnerAuthentication.MSCHAPv2
     peap_version: PEAPVersion = PEAPVersion.AUTOMATIC
+    anonymous_identity: Optional[str] = None
     domain: Optional[str] = None
     ca_cert: Optional[str] = None
     ca_cert_password: Optional[str] = None
@@ -262,11 +264,11 @@ class PEAPAuthentication(NetworkBase):
     def from_kwargs(cls, **kwargs):
         logger.info(f"----------------> PEAPAuthentication: {kwargs}")
         args = cls.cleanup(**kwargs)
+
         args["inner_authentication"] = PEAPInnerAuthentication[
-            kwargs.pop("inner_authentication")
+            kwargs.pop("inner_authentication", "MSCHAPv2")
         ]
-        peap_version = kwargs.pop("peap_version", "AUTOMATIC")
-        args["peap_version"] = PEAPVersion[peap_version]
+        args["peap_version"] = PEAPVersion[kwargs.pop("peap_version", "AUTOMATIC")]
         if "ca_cert" in args:
             NetworkBase.handle_filesystem_argument(
                 "ca_cert", args, filename=generate_filename(args["id"])
@@ -276,11 +278,12 @@ class PEAPAuthentication(NetworkBase):
     def to_nmcli(self) -> str:
         response = f"802-11-wireless-security.key-mgmt wpa-eap \
 802-1x.eap peap \
-802-1x.anonymous-identity {self.anonymous_identity} \
 802-1x.identity {self.username} \
 802-1x.phase2-auth {self.inner_authentication.name}"
+        if self.anonymous_identity:
+            response += f" 802-1x.anonymous-identity {self.anonymous_identity}"
         if self.peap_version != PEAPVersion.AUTOMATIC:
-            response += f"802-1x.phase1-peapver {self.peap_version.value}"
+            response += f" 802-1x.phase1-peapver {self.peap_version.value}"
         if self.domain:
             response += f" 802-1x.domain-suffix-match {self.domain}"
         if self.ca_cert:
@@ -430,34 +433,43 @@ class Network:
         return name.replace(" ", "_").replace('"', "")
 
     def connect(self):
-        from pitop.common.command_runner import run_command
-
-        # if on bookworm, use nmcli
-        if get_linux_distro() == "bookworm":
+        cmds = []
+        if any(
+            [
+                isinstance(self.authentication, WpaPersonal),
+                isinstance(self.authentication, OWE),
+                isinstance(self.authentication, Open),
+            ]
+        ):
+            # On simple networks, we'll connect using raspi-config
+            # https://www.raspberrypi.com/documentation/computers/configuration.html#system-options36
+            plain = 0
+            password = (
+                ""
+                if isinstance(self.authentication, OWE)
+                or isinstance(self.authentication, Open)
+                else f'"{self.authentication.password}"'
+            )
+            cmds.append(
+                f'raspi-config nonint do_wifi_ssid_passphrase "{self.ssid}" {password} {int(self.hidden)} {plain}'
+            )
+        elif get_linux_distro() == "bookworm":
             cmds = [
                 self.to_nmcli(),
-                f"nmcli connection up '{self.id}'",
+                f'nmcli connection up "{self.id}"',
             ]
-            for cmd in cmds:
-                logger.info(f"--> Connecting to network: {cmd}")
-                run_command(cmd, timeout=30, check=True)
         else:
             cmd = self.to_wpasupplicant_conf()
             # append to wpa_supplicant.conf
             with open("/etc/wpa_supplicant/wpa_supplicant.conf", "a") as f:
                 f.write("\n")
                 f.write("\n".join(cmd))
-            run_command("systemctl restart wpa_supplicant", timeout=30, check=True)
+            cmds.append("systemctl restart wpa_supplicant")
 
-        # # On simple networks, we'll connect using raspi-config
-        # # https://www.raspberrypi.com/documentation/computers/configuration.html#system-options36
-        # plain = 0
-        # password = (
-        #     ""
-        #     if isinstance(self.authentication, OWE)
-        #     else f'"{self.authentication.password}"'
-        # )
-        # cmd = f'raspi-config nonint do_wifi_ssid_passphrase "{self.ssid}" {password} {int(self.hidden)} {plain}'
+        logger.info("--> Connecting to network")
+        for cmd in cmds:
+            logger.info(f"--> Executing: {cmd}")
+            run_command(cmd, timeout=30, check=True)
 
     @classmethod
     def from_dict(cls, data: dict):
