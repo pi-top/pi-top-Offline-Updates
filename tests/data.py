@@ -39,7 +39,10 @@ connection_dict_arr = [
             "data": {
                 "authentication": "TLS",
                 "identity": "this-is-an-identity",
-                "user_private_key": "this-is-a-user-private-key",
+                "user_private_key": {
+                    "filename": "user.key",
+                    "content": "this-is-the-content",
+                },
             },
         },
     },
@@ -76,7 +79,7 @@ nmcli_str_arr = [
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless.hidden yes 802-11-wireless-security.key-mgmt OWE',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" mode infra 802-11-wireless-security.key-mgmt wpa-psk 802-11-wireless-security.psk "this-is-a-password"',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" key-mgmt wpa-eap 802-1x.eap pwd 802-1x.identity this-is-a-username 802-1x.password "this-is-a-password"',  # noqa: E501
-    'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/test.crt',  # noqa: E501
+    'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/user.key',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap ttls 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.password "this-is-a-password"',  # noqa: E501
     'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap peap 802-1x.identity this-is-a-username 802-1x.phase2-auth MSCHAPv2 802-1x.anonymous-identity this-is-an-anonymous-identity 802-1x.password "this-is-a-password"',  # noqa: E501
 ]
@@ -108,7 +111,7 @@ wpasupplicant_str_arr = [
         key_mgmt=WPA-EAP
         eap=TLS
         identity="this-is-an-identity"
-        private_key="/tmp/test.crt"
+        private_key="/tmp/user.key"
 }""",
     """network {
         ssid="this-is-a-ssid"
@@ -141,7 +144,7 @@ connect_cmds_arr = [
         'nmcli connection up "this-is-a-ssid"',
     ],
     [
-        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/this-is-a-ssid.crt',  # noqa: E501
+        'nmcli connection add type wifi ifname wlan0 con-name "this-is-a-ssid" ssid "this-is-a-ssid" 802-11-wireless-security.key-mgmt wpa-eap 802-1x.eap tls 802-1x.identity this-is-an-identity 802-1x.private-key /tmp/user.key',  # noqa: E501
         'nmcli connection up "this-is-a-ssid"',
     ],
     [

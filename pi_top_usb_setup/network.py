@@ -76,21 +76,34 @@ class NetworkBase:
             key: value for key, value in kwargs.items() if key in cls.__annotations__
         }
 
-    @staticmethod
-    def handle_filesystem_argument(key: str, args: dict, filename: str) -> None:
-        save_to_file(filename, content=args[key])
-        args[key] = filename
+
+def generate_filename(id: str, prefix: str, extension: str) -> str:
+    return f"{CERT_FOLDER}/PT{id}-{prefix}.{extension}"
 
 
-def save_to_file(filename: str, content: str):
-    # run_command("mkdir -p /usr/local/share/ca-certificates/", timeout=10, check=True)
-    logger.info(f"Saving content to file: '{filename}', content: '{content}'")
-    with open(filename, "w") as f:
-        f.write(content)
+@dataclass
+class File:
+    filename: str
+    content: str
+    folder: str
 
+    @classmethod
+    def from_dict(cls, data: dict):
+        return File(
+            filename=data["filename"],
+            content=data["content"],
+            folder=data.get("folder", CERT_FOLDER),
+        )
 
-def generate_filename(id: str) -> str:
-    return f"{CERT_FOLDER}/{id}.crt"
+    @property
+    def path(self):
+        return f"{self.folder}/{self.filename}"
+
+    def save(self):
+        run_command(f"mkdir -p {self.folder}", timeout=10, check=True)
+        logger.info(f"Saving content to file: '{self.path}', content: '{self.content}'")
+        with open(f"{self.path}", "w") as f:
+            f.write(self.content)
 
 
 #################################
@@ -129,11 +142,11 @@ class PWDAuthentication(NetworkBase):
 class TLSAuthentication(NetworkBase):
     id: str
     identity: str
-    user_private_key: str
+    user_private_key: File
     domain: Optional[str] = None
-    ca_cert: Optional[str] = None
+    ca_cert: Optional[File] = None
     ca_cert_password: Optional[str] = None
-    user_cert: Optional[str] = None
+    user_cert: Optional[File] = None
     user_cert_password: Optional[str] = None
     user_private_key_password: Optional[str] = None
 
@@ -141,29 +154,31 @@ class TLSAuthentication(NetworkBase):
     def from_kwargs(cls, **kwargs):
         logger.info(f"----------------> TLSAuthentication: {kwargs}")
         args = cls.cleanup(**kwargs)
-        # 'ca_cert' and 'user_private_key' contain keys; need to save them to files and pass the paths to the constructor
-        NetworkBase.handle_filesystem_argument(
-            "user_private_key", args, filename=generate_filename(args.get("id"))
-        )
+        # 'user_cert', 'ca_cert' and 'user_private_key' contain keys; need to save them to files and pass the paths to the constructor
+        args["user_private_key"] = File.from_dict(args["user_private_key"])
+        args["user_private_key"].save()
+        if "user_cert" in args:
+            args["user_cert"] = File.from_dict(args["user_cert"])
+            args["user_cert"].save()
         if "ca_cert" in args:
-            NetworkBase.handle_filesystem_argument(
-                "ca_cert", args, filename=generate_filename(args.get("id"))
-            )
+            args["ca_cert"] = File.from_dict(args["ca_cert"])
+            args["ca_cert"].save()
         return TLSAuthentication(**cls.cleanup(**args))
 
     def to_nmcli(self) -> str:
         response = f"802-11-wireless-security.key-mgmt wpa-eap \
 802-1x.eap tls \
 802-1x.identity {self.identity} \
-802-1x.private-key {self.user_private_key}"
+802-1x.private-key {self.user_private_key.path}"
         if self.domain:
             response += f" 802-1x.domain-suffix-match {self.domain}"
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert}"
+            response += f" 802-1x.ca-cert {self.ca_cert.path}"
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
+        # CHECK: REQUIRED?????
         if self.user_cert:
-            response += f" 802-1x.client-cert {self.user_cert}"
+            response += f" 802-1x.client-cert {self.user_cert.path}"
         if self.user_cert_password:
             response += f' 802-1x.client-cert-password "{self.user_cert_password}"'
         if self.user_private_key_password:
@@ -177,16 +192,16 @@ class TLSAuthentication(NetworkBase):
             "key_mgmt=WPA-EAP",
             "eap=TLS",
             f'identity="{self.identity}"',
-            f'private_key="{self.user_private_key}"',
+            f'private_key="{self.user_private_key.path}"',
         ]
         if self.domain:
             response.append(f'domain_suffix_match="{self.domain}"')
         if self.ca_cert:
-            response.append(f'ca_cert="{self.ca_cert}"')
+            response.append(f'ca_cert="{self.ca_cert.path}"')
         # if self.ca_cert_password:
         #     response.append(f"ca_cert_password=\"{self.ca_cert_password}\""
         if self.user_cert:
-            response.append(f'client_cert="{self.user_cert}"')
+            response.append(f'client_cert="{self.user_cert.path}"')
         # if self.user_cert_password:
         #     response.append(f"client_cert_password=\"{self.user_cert_password}\""
         if self.user_private_key_password:
@@ -200,7 +215,7 @@ class TTLSAuthentication(NetworkBase):
     anonymous_identity: str
     username: str
     inner_authentication: TTLSInnerAuthentication
-    ca_cert: Optional[str] = None
+    ca_cert: Optional[File] = None
     ca_cert_password: Optional[str] = None
     password: Optional[str] = None
 
@@ -212,9 +227,8 @@ class TTLSAuthentication(NetworkBase):
             kwargs["inner_authentication"]
         ]
         if "ca_cert" in args:
-            NetworkBase.handle_filesystem_argument(
-                "ca_cert", args, filename=generate_filename(args["id"])
-            )
+            args["ca_cert"] = File.from_dict(args["ca_cert"])
+            args["ca_cert"].save()
         return TTLSAuthentication(**args)
 
     def to_nmcli(self) -> str:
@@ -224,7 +238,7 @@ class TTLSAuthentication(NetworkBase):
 802-1x.identity {self.username} \
 802-1x.phase2-auth {self.inner_authentication.name}"
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert}"
+            response += f" 802-1x.ca-cert {self.ca_cert.path}"
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
@@ -240,7 +254,7 @@ class TTLSAuthentication(NetworkBase):
             f'phase2="auth={self.inner_authentication.name}"',
         ]
         if self.ca_cert:
-            response.append(f'ca_cert="{self.ca_cert}"')
+            response.append(f'ca_cert="{self.ca_cert.path}"')
         # if self.ca_cert_password:
         #     response.append(f"ca_cert_password=\"{self.ca_cert_password}\"")
         if self.password:
@@ -256,7 +270,7 @@ class PEAPAuthentication(NetworkBase):
     peap_version: PEAPVersion = PEAPVersion.AUTOMATIC
     anonymous_identity: Optional[str] = None
     domain: Optional[str] = None
-    ca_cert: Optional[str] = None
+    ca_cert: Optional[File] = None
     ca_cert_password: Optional[str] = None
     password: Optional[str] = None
 
@@ -270,9 +284,8 @@ class PEAPAuthentication(NetworkBase):
         ]
         args["peap_version"] = PEAPVersion[kwargs.pop("peap_version", "AUTOMATIC")]
         if "ca_cert" in args:
-            NetworkBase.handle_filesystem_argument(
-                "ca_cert", args, filename=generate_filename(args["id"])
-            )
+            args["ca_cert"] = File.from_dict(args["ca_cert"])
+            args["ca_cert"].save()
         return PEAPAuthentication(**args)
 
     def to_nmcli(self) -> str:
@@ -287,7 +300,7 @@ class PEAPAuthentication(NetworkBase):
         if self.domain:
             response += f" 802-1x.domain-suffix-match {self.domain}"
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert}"
+            response += f" 802-1x.ca-cert {self.ca_cert.path}"
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
@@ -307,7 +320,7 @@ class PEAPAuthentication(NetworkBase):
         if self.domain:
             response.append(f'domain_suffix_match="{self.domain}"')
         if self.ca_cert:
-            response.append(f'ca_cert="{self.ca_cert}"')
+            response.append(f'ca_cert="{self.ca_cert.path}"')
         if self.ca_cert_password:
             response.append(f'ca_cert_password="{self.ca_cert_password}"')
         if self.password:
