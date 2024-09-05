@@ -10,7 +10,7 @@ from pi_top_usb_setup.utils import get_linux_distro
 logger = logging.getLogger(__name__)
 
 
-CERT_FOLDER = "/usr/local/share/ca-certificates/"
+CERT_FOLDER = "/usr/local/share/ca-certificates"
 
 #################################
 # Enums
@@ -77,10 +77,6 @@ class NetworkBase:
         }
 
 
-def generate_filename(id: str, prefix: str, extension: str) -> str:
-    return f"{CERT_FOLDER}/PT{id}-{prefix}.{extension}"
-
-
 @dataclass
 class File:
     filename: str
@@ -111,7 +107,6 @@ class File:
 #################################
 @dataclass
 class PWDAuthentication(NetworkBase):
-    id: str
     username: str
     password: Optional[str] = None
 
@@ -121,9 +116,9 @@ class PWDAuthentication(NetworkBase):
         return PWDAuthentication(**cls.cleanup(**kwargs))
 
     def to_nmcli(self) -> str:
-        response = f"key-mgmt wpa-eap \
+        response = f'key-mgmt wpa-eap \
 802-1x.eap pwd \
-802-1x.identity {self.username}"
+802-1x.identity "{self.username}"'
         if self.password:
             response += f' 802-1x.password "{self.password}"'
         return response
@@ -140,7 +135,6 @@ class PWDAuthentication(NetworkBase):
 
 @dataclass
 class TLSAuthentication(NetworkBase):
-    id: str
     identity: str
     user_private_key: File
     domain: Optional[str] = None
@@ -166,19 +160,18 @@ class TLSAuthentication(NetworkBase):
         return TLSAuthentication(**cls.cleanup(**args))
 
     def to_nmcli(self) -> str:
-        response = f"802-11-wireless-security.key-mgmt wpa-eap \
+        response = f'802-11-wireless-security.key-mgmt wpa-eap \
 802-1x.eap tls \
-802-1x.identity {self.identity} \
-802-1x.private-key {self.user_private_key.path}"
+802-1x.identity "{self.identity}" \
+802-1x.private-key "{self.user_private_key.path}"'
         if self.domain:
-            response += f" 802-1x.domain-suffix-match {self.domain}"
+            response += f' 802-1x.domain-suffix-match "{self.domain}"'
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert.path}"
+            response += f' 802-1x.ca-cert "{self.ca_cert.path}"'
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
-        # CHECK: REQUIRED?????
         if self.user_cert:
-            response += f" 802-1x.client-cert {self.user_cert.path}"
+            response += f' 802-1x.client-cert "{self.user_cert.path}"'
         if self.user_cert_password:
             response += f' 802-1x.client-cert-password "{self.user_cert_password}"'
         if self.user_private_key_password:
@@ -211,10 +204,9 @@ class TLSAuthentication(NetworkBase):
 
 @dataclass
 class TTLSAuthentication(NetworkBase):
-    id: str
-    anonymous_identity: str
     username: str
     inner_authentication: TTLSInnerAuthentication
+    anonymous_identity: str
     ca_cert: Optional[File] = None
     ca_cert_password: Optional[str] = None
     password: Optional[str] = None
@@ -229,16 +221,18 @@ class TTLSAuthentication(NetworkBase):
         if "ca_cert" in args:
             args["ca_cert"] = File.from_dict(args["ca_cert"])
             args["ca_cert"].save()
+        if "anonymous_identity" not in args:
+            args["anonymous_identity"] = ""
         return TTLSAuthentication(**args)
 
     def to_nmcli(self) -> str:
-        response = f"802-11-wireless-security.key-mgmt wpa-eap \
+        response = f'802-11-wireless-security.key-mgmt wpa-eap \
 802-1x.eap ttls \
-802-1x.anonymous-identity {self.anonymous_identity} \
-802-1x.identity {self.username} \
-802-1x.phase2-auth {self.inner_authentication.name}"
+802-1x.anonymous-identity "{self.anonymous_identity}" \
+802-1x.identity "{self.username}" \
+802-1x.phase2-auth {self.inner_authentication.name}'
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert.path}"
+            response += f' 802-1x.ca-cert "{self.ca_cert.path}"'
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
@@ -264,7 +258,6 @@ class TTLSAuthentication(NetworkBase):
 
 @dataclass
 class PEAPAuthentication(NetworkBase):
-    id: str
     username: str
     inner_authentication: PEAPInnerAuthentication = PEAPInnerAuthentication.MSCHAPv2
     peap_version: PEAPVersion = PEAPVersion.AUTOMATIC
@@ -289,18 +282,18 @@ class PEAPAuthentication(NetworkBase):
         return PEAPAuthentication(**args)
 
     def to_nmcli(self) -> str:
-        response = f"802-11-wireless-security.key-mgmt wpa-eap \
+        response = f'802-11-wireless-security.key-mgmt wpa-eap \
 802-1x.eap peap \
-802-1x.identity {self.username} \
-802-1x.phase2-auth {self.inner_authentication.name}"
+802-1x.identity "{self.username}" \
+802-1x.phase2-auth {self.inner_authentication.name}'
         if self.anonymous_identity:
-            response += f" 802-1x.anonymous-identity {self.anonymous_identity}"
+            response += f' 802-1x.anonymous-identity "{self.anonymous_identity}"'
         if self.peap_version != PEAPVersion.AUTOMATIC:
             response += f" 802-1x.phase1-peapver {self.peap_version.value}"
         if self.domain:
-            response += f" 802-1x.domain-suffix-match {self.domain}"
+            response += f' 802-1x.domain-suffix-match "{self.domain}"'
         if self.ca_cert:
-            response += f" 802-1x.ca-cert {self.ca_cert.path}"
+            response += f' 802-1x.ca-cert ”{self.ca_cert.path}"'
         if self.ca_cert_password:
             response += f' 802-1x.ca-cert-password "{self.ca_cert_password}"'
         if self.password:
@@ -333,7 +326,6 @@ class PEAPAuthentication(NetworkBase):
 #################################
 @dataclass
 class WpaPersonal(NetworkBase):
-    id: str
     password: str
 
     def to_nmcli(self) -> str:
@@ -350,14 +342,13 @@ class WpaPersonal(NetworkBase):
 
 @dataclass
 class LEAP(NetworkBase):
-    id: str
     username: str
     password: Optional[str] = None
 
     def to_nmcli(self) -> str:
-        response = f"802-11-wireless-security.auth-alg leap \
+        response = f'802-11-wireless-security.auth-alg leap \
 802-11-wireless-security.key-mgmt ieee8021x \
-802-11-wireless-security.leap-username {self.username}"
+802-11-wireless-security.leap-username "{self.username}"'
         if self.password:
             response += f'802-11-wireless-security.leap-password "{self.password}"'
         return response
@@ -373,9 +364,7 @@ class LEAP(NetworkBase):
         return response
 
 
-@dataclass
-class OWE(NetworkBase):
-    id: str
+class OWE:
 
     def to_nmcli(self) -> str:
         return "802-11-wireless-security.key-mgmt OWE"
@@ -386,7 +375,6 @@ class OWE(NetworkBase):
 
 @dataclass
 class Open(NetworkBase):
-    id: str
 
     def to_nmcli(self) -> str:
         return ""
@@ -488,14 +476,14 @@ class Network:
     def from_dict(cls, data: dict):
         logger.info(f"--> Network: {data}")
         return Network(
-            authentication=Network.get_authentication(data),
+            authentication=Network.get_authentication(data["authentication"]),
             ssid=data["ssid"],
             hidden=data.get("hidden", False),
         )
 
     @staticmethod
     def get_authentication(
-        connection_data: dict,
+        auth_dict: dict,
     ) -> WpaPersonal | LEAP | OWE | WpaEnterprise:
         lookup = {
             WiFiSecurityEnum.LEAP: LEAP,
@@ -506,14 +494,11 @@ class Network:
             ),
             WiFiSecurityEnum.WPA_PERSONAL: WpaPersonal,
         }
-        auth_dict = connection_data["authentication"]
         wifi_security_enum = WiFiSecurityEnum[auth_dict["type"]]
         wifi_security_class = lookup[wifi_security_enum]
 
         assert callable(wifi_security_class)
-        return wifi_security_class(
-            **auth_dict.get("data", {}), id=Network.to_id(connection_data["ssid"])
-        )
+        return wifi_security_class(**auth_dict.get("data", {}))
 
     def to_nmcli(self) -> str:
         interface = "wlan0"
