@@ -428,7 +428,7 @@ class Network:
     @property
     def name(self) -> str:
         # A connection file is created in /etc/NetworkManager/system-connections/ with the name of the connection
-        return f'PT-USB-SETUP-{self.ssid.replace(" ", "_").replace('"', "")}'
+        return "PT-USB-SETUP-" + self.ssid.replace(" ", "_").replace('"', "")
 
     def connect(self):
         cmds = []
