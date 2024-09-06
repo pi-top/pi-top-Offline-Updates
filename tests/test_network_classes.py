@@ -115,3 +115,33 @@ def test_keys_and_certs_are_written_to_disk(mocker):
         n.authentication.authentication.user_cert.path,
         f"tests/certs/{data['authentication']['data']['user_cert']['filename']}",
     )
+
+
+def test_deletes_connection_if_exists(mocker):
+    # connection is removed if it already exists
+    from pi_top_usb_setup.network import Network
+
+    Network.exists = lambda _: True
+    run_command_mock = mocker.patch("pi_top_usb_setup.network.run_command")
+
+    data = {
+        "ssid": "this-is-a-ssid",
+        "authentication": {
+            "type": "WPA_ENTERPRISE",
+            "identity": "this-is-an-identity",
+            "data": {
+                "authentication": "PWD",
+                "username": "this-is-a-username",
+                "password": "this-is-a-password",
+            },
+        },
+    }
+    n = Network.from_dict(data)
+    n.connect()
+
+    run_command_mock.assert_any_call(
+        f'nmcli connection down "PT-USB-SETUP-{data["ssid"]}"', timeout=30, check=True
+    )
+    run_command_mock.assert_any_call(
+        f'nmcli connection delete "PT-USB-SETUP-{data["ssid"]}"', timeout=30, check=True
+    )

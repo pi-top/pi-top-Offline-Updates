@@ -102,6 +102,16 @@ class File:
             f.write(self.content)
 
 
+def runs_without_error(cmd):
+    logger.info(f"Checking if command '{cmd}' runs without errors...")
+    try:
+        run_command(cmd, timeout=10, check=True)
+        return True
+    except Exception as e:
+        logger.warning(f"Command '{cmd}' failed: {e}")
+        return False
+
+
 #################################
 # Authentication classes
 #################################
@@ -452,10 +462,13 @@ class Network:
                 f'raspi-config nonint do_wifi_ssid_passphrase "{self.ssid}" {password} {int(self.hidden)} {plain}'
             )
         elif get_linux_distro() == "bookworm":
-            cmds = [
-                self.to_nmcli(),
-                f'nmcli connection up "{self.name}"',
-            ]
+            if self.exists():
+                # delete existing connection
+                cmds.append(f'nmcli connection down "{self.name}"')
+                cmds.append(f'nmcli connection delete "{self.name}"')
+
+            cmds.append(self.to_nmcli())
+            cmds.append(f'nmcli connection up "{self.name}"')
         else:
             cmd = self.to_wpasupplicant_conf()
             # append to wpa_supplicant.conf
@@ -468,6 +481,13 @@ class Network:
         for cmd in cmds:
             logger.info(f"--> Executing: {cmd}")
             run_command(cmd, timeout=30, check=True)
+
+    def exists(self):
+        if get_linux_distro() == "bookworm":
+            return runs_without_error(f'nmcli connection show "{self.name}"')
+        else:
+            with open("/etc/wpa_supplicant/wpa_supplicant.conf", "r") as f:
+                return f"ssid={self.ssid}" in f.read()
 
     @classmethod
     def from_dict(cls, data: dict):
