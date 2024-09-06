@@ -426,12 +426,9 @@ class Network:
     hidden: bool = False
 
     @property
-    def id(self) -> str:
-        return Network.to_id(self.ssid)
-
-    @staticmethod
-    def to_id(name) -> str:
-        return name.replace(" ", "_").replace('"', "")
+    def name(self) -> str:
+        # A connection file is created in /etc/NetworkManager/system-connections/ with the name of the connection
+        return f'PT-USB-SETUP-{self.ssid.replace(" ", "_").replace('"', "")}'
 
     def connect(self):
         cmds = []
@@ -457,7 +454,7 @@ class Network:
         elif get_linux_distro() == "bookworm":
             cmds = [
                 self.to_nmcli(),
-                f'nmcli connection up "{self.id}"',
+                f'nmcli connection up "{self.name}"',
             ]
         else:
             cmd = self.to_wpasupplicant_conf()
@@ -502,7 +499,7 @@ class Network:
 
     def to_nmcli(self) -> str:
         interface = "wlan0"
-        response = f'nmcli connection add type wifi ifname {interface} con-name "{self.id}" ssid "{self.ssid}"'
+        response = f'nmcli connection add type wifi ifname {interface} con-name "{self.name}" ssid "{self.ssid}"'
         if self.hidden:
             response += " 802-11-wireless.hidden yes"
         response += f" {self.authentication.to_nmcli()}"
