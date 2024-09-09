@@ -17,7 +17,11 @@ from pi_top_usb_setup.exceptions import (
     NotEnoughSpaceException,
 )
 from pi_top_usb_setup.system_updater import SystemUpdater
-from pi_top_usb_setup.utils import get_package_version, restart_service_and_skip_updates
+from pi_top_usb_setup.utils import (
+    RestartingSystemdService,
+    get_package_version,
+    restart_service_and_skip_user_confirmation_dialog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +125,9 @@ class RunSetupPage(Component, HasGutterIcons):
             self._complete_onboarding()
 
             self.state.update({"run_state": RunStates.DONE})
+        except RestartingSystemdService:
+            logger.warning("Restarting systemd service, exiting ...")
+            return
         except Exception as e:
             logger.error(f"{e}")
 
@@ -170,12 +177,37 @@ class RunSetupPage(Component, HasGutterIcons):
                 ),
                 on_error=lambda message: logger.error(f"{message}"),
             )
+
             version_before_update = get_package_version("pi-top-usb-setup")
+            logger.info(
+                f"Before update, 'pi-top-usb-setup' version is {version_before_update}"
+            )
+
             logger.info("Starting system update")
             self.state.update({"run_state": RunStates.UPDATING_SYSTEM})
+
+            # Update sources
             updater.update()
+
+            # Upgrade pi-top-usb-setup package first
+            updater.upgrade_package("pi-top-usb-setup")
+
+            # Restart service if it was updated
+            version_after_update = get_package_version("pi-top-usb-setup")
+            if version_before_update != version_after_update:
+                logger.warning(
+                    f"Package 'pi-top-usb-setup' was updated from '{version_before_update}' to '{version_after_update}', restarting app..."
+                )
+                restart_service_and_skip_user_confirmation_dialog(
+                    mount_point=self.fs.SETUP_FOLDER
+                )
+                raise RestartingSystemdService
+
+            # Upgrade system
             updater.upgrade()
             logger.info("Finished updating")
+        except RestartingSystemdService:
+            raise
         except NotAnAptRepository as e:
             logger.warning(f"{e}")
             return
@@ -184,11 +216,6 @@ class RunSetupPage(Component, HasGutterIcons):
                 {"run_state": RunStates.ERROR, "error": AppErrors.UPDATE_ERROR}
             )
             raise Exception(f"Update Error: {e}")
-
-        # Restart service if it was updated
-        if version_before_update != get_package_version("pi-top-usb-setup"):
-            logger.info("Package 'pi-top-usb-setup' was updated, restarting app...")
-            restart_service_and_skip_updates()
 
     def _configure_device(self):
         self.state.update({"run_state": RunStates.CONFIGURING_DEVICE})

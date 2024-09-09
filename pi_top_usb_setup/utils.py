@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import signal
 import tarfile
 from pathlib import Path
 from queue import Queue
@@ -13,6 +14,10 @@ from typing import Callable, Dict, Optional
 from pitop.common.command_runner import run_command
 
 logger = logging.getLogger(__name__)
+
+
+class RestartingSystemdService(Exception):
+    pass
 
 
 def systemctl(command: str, name: str, timeout=10) -> Optional[str]:
@@ -173,15 +178,15 @@ class Process:
         return exit_code
 
 
-def restart_service_and_skip_updates():
+def restart_service_and_skip_user_confirmation_dialog(mount_point: str):
     # Start an instance with arguments; these should be encoded
     encoded_args = run_command(
-        "systemd-escape -- '--skip-dialog --skip-update'", timeout=5
+        f"systemd-escape -- '{mount_point} --skip-dialog'", timeout=5
     )
     systemctl("start", f"pt-usb-setup@'{encoded_args}'")
 
     # Stop this instance
-    systemctl("stop", "pt-usb-setup")
+    os.kill(os.getpid(), signal.SIGINT)
 
 
 def get_linux_distro():
