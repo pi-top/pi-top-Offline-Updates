@@ -440,15 +440,18 @@ class Network:
         # A connection file is created in /etc/NetworkManager/system-connections/ with the name of the connection
         return "PT-USB-SETUP-" + self.ssid.replace(" ", "_").replace('"', "")
 
-    def connect(self):
-        cmds = []
-        if any(
+    def should_connect_with_raspi_config(self):
+        return any(
             [
                 isinstance(self.authentication, WpaPersonal),
                 isinstance(self.authentication, OWE),
                 isinstance(self.authentication, Open),
             ]
-        ):
+        )
+
+    def connect(self):
+        cmds = []
+        if self.should_connect_with_raspi_config():
             # On simple networks, we'll connect using raspi-config
             # https://www.raspberrypi.com/documentation/computers/configuration.html#system-options36
             plain = 0
@@ -463,7 +466,7 @@ class Network:
             )
         elif get_linux_distro() == "bookworm":
             if self.exists():
-                # delete existing connection
+                # disconnect and delete existing connection
                 cmds.append(f'nmcli connection down "{self.name}"')
                 cmds.append(f'nmcli connection delete "{self.name}"')
 
@@ -480,7 +483,10 @@ class Network:
         logger.info("--> Connecting to network")
         for cmd in cmds:
             logger.info(f"--> Executing: {cmd}")
-            run_command(cmd, timeout=30, check=True)
+            try:
+                run_command(cmd, timeout=30, check=True)
+            except Exception as e:
+                logger.error(f"Error connecting: {e}")
 
     def exists(self):
         if get_linux_distro() == "bookworm":
