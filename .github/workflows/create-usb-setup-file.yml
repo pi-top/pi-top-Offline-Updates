@@ -82,11 +82,23 @@ jobs:
       - name: Update pi-topOS container and download packages
         run: |
           sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
+            # Use /packages/tmp as a temporary directory to store the apt cache
+            mkdir -p /packages/tmp
+            mv -i /var/cache/apt /packages/tmp
+            ln -s /packages/tmp /var/cache/apt
+
+            # Update system and download packages
             apt update
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
             cd /packages
             ls -lh
             bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
+
+            # Cleanup
+            apt-get clean
+            unlink /var/cache/apt
+            mv /packages/tmp/apt /var/cache
+            rm -rf /packages/tmp
           EOF
 
       - name: Delete OS image to save space
