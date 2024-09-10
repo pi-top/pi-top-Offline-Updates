@@ -68,7 +68,7 @@ class SystemUpdater:
 
         with CustomAptSource(self.apt_repository) as apt_source:
             if apt_source:
-                cmd += f' -o Dir::Etc::sourcelist="{apt_source}" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"'
+                cmd += f' -o Dir::Etc::sourcelist="{apt_source}" -o APT::Get::List-Cleanup="0"'
 
             # Send status reports to stdout
             cmd += " -o APT::Status-Fd=1"
