@@ -1,7 +1,6 @@
 import json
 import logging
 from pathlib import Path
-from subprocess import PIPE, Popen
 from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
@@ -24,20 +23,14 @@ from pt_os_web_portal.backend.helpers.timezone import set_timezone
 from pt_os_web_portal.backend.helpers.wifi_country import set_wifi_country
 
 from pi_top_usb_setup.exceptions import ExtractionError, NotEnoughSpaceException
+from pi_top_usb_setup.network import Network
 from pi_top_usb_setup.utils import (
     drive_has_enough_free_space,
     extract_file,
+    get_linux_distro,
     get_tar_gz_extracted_size,
     umount_usb_drive,
 )
-
-
-def get_linux_distro():
-    cmd = "grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2"
-    process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    stdout, _ = process.communicate()
-    return stdout.decode().strip()
-
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +123,24 @@ class AppFilesystem:
             logger.info("No device configuration file found; skipping....")
             return
 
+        def set_network(network_data):
+            # FORMAT:
+            # {
+            #     "ssid": str,
+            #     "hidden": bool
+            #     "authentication": {
+            #         "type": str,
+            #         "password": str,
+            #         ...
+            #     },
+            # }
+            logger.info(f"Setting network with data: {network_data}")
+            try:
+                Network.from_dict(network_data).connect()
+            except Exception as e:
+                logger.error(f"Error setting network: {e}")
+            return
+
         # setting the keyboard layout requires a layout and a variant
         lookup = {
             "language": set_locale,
@@ -139,6 +150,7 @@ class AppFilesystem:
                 *layout_and_variant_arr
             ),
             "email": set_registration_email,
+            "network": set_network,
         }
 
         logger.info(f"Configuring device using {self.DEVICE_CONFIG}")

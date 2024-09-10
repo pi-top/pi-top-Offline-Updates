@@ -182,3 +182,10 @@ def restart_service_and_skip_updates():
 
     # Stop this instance
     systemctl("stop", "pt-usb-setup")
+
+
+def get_linux_distro():
+    cmd = "grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2"
+    process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    stdout, _ = process.communicate()
+    return stdout.decode().strip()
