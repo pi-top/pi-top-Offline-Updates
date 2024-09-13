@@ -47,12 +47,16 @@ download_package() {
     CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
     # Retry on failure
     if [ $? -ne 0 ]; then
-        echo "Failed to download package ${package}. Retrying with latest version..."
+        echo "Failed to download package ${package}. Retrying ..."
         sleep 1
 
-        DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
         # Retry a few times before giving up
         for i in {1..10}; do
+            # After a few attempts, try to download the latest version
+            if [ $i -eq 7 ]; then
+                DOWNLOAD_CMD="apt download ${package_name} &>/dev/null"
+                echo "Failed to download package ${package}. Retrying with latest version..."
+            fi
             CMD_OUTPUT=$(eval "${DOWNLOAD_CMD}")
             echo "Downloading ${package_name}, retry ${i}..."
             if [ $? -eq 0 ]; then
