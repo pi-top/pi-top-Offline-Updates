@@ -85,5 +85,8 @@ class SystemUpdater:
     def update(self) -> None:
         self._run_cmd("sudo apt-get update")
 
+    def upgrade_package(self, package_name) -> None:
+        self._run_cmd(f"sudo apt-get install -y {package_name}")
+
     def upgrade(self) -> None:
         self._run_cmd("sudo apt-get dist-upgrade -y")
