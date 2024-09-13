@@ -72,21 +72,25 @@ jobs:
           unzip pi-topOS.zip
 
       - name: Mount OS Image root partition
-        uses: jcapona/mount-image-partition-action@v0.3
+        uses: jcapona/mount-image-partition-action@v1.0
         with:
           imagePath: ${{ env.IMAGE_FILE }}
           mountPoint: ${{ env.MOUNT_POINT }}
-          partitionIndex: 3
-          filesystem: ext4
+          partitionIndex: 4
+          extraDiskSpace: 1024
 
       - name: Update pi-topOS container and download packages
         run: |
           sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
+            # Update system and download packages
             apt update
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
             cd /packages
             ls -lh
             bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
+
+            # Cleanup
+            apt-get clean
           EOF
 
       - name: Delete OS image to save space
