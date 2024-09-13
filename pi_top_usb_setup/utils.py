@@ -189,8 +189,14 @@ def restart_service_and_skip_user_confirmation_dialog(mount_point: str):
     os.kill(os.getpid(), signal.SIGINT)
 
 
-def get_linux_distro():
+def get_linux_distro() -> str:
     cmd = "grep VERSION_CODENAME /etc/os-release | cut -d'=' -f2"
     process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, _ = process.communicate()
     return stdout.decode().strip()
+
+
+def boot_partition() -> str:
+    if get_linux_distro() == "bookworm":
+        return "/boot/firmware"
+    return "/boot"
