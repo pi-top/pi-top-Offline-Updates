@@ -1,2 +1,3 @@
 pi-top-usb-setup: no-manual-page usr/bin/pt-usb-setup
 pi-top-usb-setup: no-manual-page usr/bin/handle-usb-drive-for-pi-top-setup
+pi-top-usb-setup: no-manual-page usr/bin/pt-configure-system
