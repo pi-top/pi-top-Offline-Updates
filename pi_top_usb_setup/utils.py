@@ -1,8 +1,12 @@
+import grp
 import logging
 import os
+import pwd
 import shutil
 import signal
+import stat
 import tarfile
+import time
 from pathlib import Path
 from queue import Queue
 from shlex import split
@@ -194,3 +198,26 @@ def get_linux_distro():
     process = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=PIPE)
     stdout, _ = process.communicate()
     return stdout.decode().strip()
+
+
+def print_folder_recursively(path):
+    for root, dirs, files in os.walk(path):
+        logging.info(f"\n{root}:")
+        entries = dirs + files
+        for entry in entries:
+            full_path = os.path.join(root, entry)
+            try:
+                st = os.lstat(full_path)
+                mode = stat.filemode(st.st_mode)
+                n_links = st.st_nlink
+                uid = st.st_uid
+                gid = st.st_gid
+                size = st.st_size
+                mtime = time.strftime("%b %d %H:%M", time.localtime(st.st_mtime))
+                user = pwd.getpwuid(uid).pw_name
+                group = grp.getgrgid(gid).gr_name
+                logging.info(
+                    f"{mode} {n_links} {user} {group} {size:>8} {mtime} {entry}"
+                )
+            except Exception as e:
+                logging.error(f"Error reading {full_path}: {e}")

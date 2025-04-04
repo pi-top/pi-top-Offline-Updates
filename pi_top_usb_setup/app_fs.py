@@ -1,6 +1,8 @@
 import json
 import logging
+from os import listdir, makedirs, path, walk
 from pathlib import Path
+from shutil import copy2
 from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
@@ -28,6 +30,7 @@ from pi_top_usb_setup.utils import (
     extract_file,
     get_linux_distro,
     get_tar_gz_extracted_size,
+    print_folder_recursively,
     umount_usb_drive,
 )
 
@@ -43,7 +46,8 @@ class AppFilesystem:
         self.USB_SETUP_FILE = f"{mount_point}/pi-top-usb-setup.tar.gz"
         self.SETUP_FOLDER = f"{self.TEMP_FOLDER}/pi-top-usb-setup"
         self.DEVICE_CONFIG = f"{self.SETUP_FOLDER}/pi-top_config.json"
-
+        self.FOLDER_TO_COPY = f"{self.SETUP_FOLDER}/files"
+        self.SCRIPTS_FOLDER = f"{self.SETUP_FOLDER}/scripts"
         self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
         if get_linux_distro() == "bookworm":
             self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates_bookworm"
@@ -59,11 +63,15 @@ class AppFilesystem:
             )
 
         self.requires_reboot = False
-        self.device = None
+        self.device = self._get_device(mount_point)
+
+    def _get_device(self, mount_point: str):
+        device = None
         if mount_point:
-            self.device = run_command(
+            device = run_command(
                 f"findmnt -n -o SOURCE --target {mount_point}", timeout=5
             ).strip()
+        return device
 
     def _find_setup_files(self):
         # find all setup files in mount point that match the glob pattern, sorted by date
@@ -176,6 +184,70 @@ class AppFilesystem:
                     on_progress(float(100.0 * i / len(lookup)))
             except Exception as e:
                 logger.error(f"{e}")
+
+    def copy_files(self, on_progress: Optional[Callable] = None) -> None:
+        if not Path(self.FOLDER_TO_COPY).exists():
+            logger.info("No files to copy; skipping...")
+            return
+
+        try:
+            print_folder_recursively(self.FOLDER_TO_COPY)
+        except Exception as e:
+            logger.error(f"Error listing files in {self.FOLDER_TO_COPY}: {e}")
+
+        logger.info(f"Copying files from {self.FOLDER_TO_COPY} to {self.MOUNT_POINT}")
+
+        total_files = sum(len(files) for _, _, files in walk(self.FOLDER_TO_COPY))
+        files_copied = 0
+
+        for root, dirs, files in walk(self.FOLDER_TO_COPY):
+            for file in files:
+                source_path = path.join(root, file)
+
+                # Get the relative path from the source_dir
+                relative_path = path.relpath(source_path, self.FOLDER_TO_COPY)
+
+                # Destination path based on root
+                destination_path = path.join("/", relative_path)
+
+                # Create target directory if it doesn't exist
+                makedirs(path.dirname(destination_path), exist_ok=True)
+
+                # Copy file
+                copy2(source_path, destination_path)
+                logging.info(f"Copied: {source_path} to {destination_path}")
+
+                # Update progress
+                files_copied += 1
+                if on_progress:
+                    progress = int((files_copied / total_files) * 100)
+                    on_progress(progress)
+
+    def run_scripts(self, on_progress: Optional[Callable] = None) -> None:
+        if not Path(self.SCRIPTS_FOLDER).exists():
+            logger.info("No scripts to run; skipping...")
+            return
+
+        try:
+            print_folder_recursively(self.SCRIPTS_FOLDER)
+        except Exception as e:
+            logger.error(f"Error listing files in {self.SCRIPTS_FOLDER}: {e}")
+
+        logger.info(f"Running scripts from {self.SCRIPTS_FOLDER}")
+
+        filenames = sorted(listdir(self.SCRIPTS_FOLDER))
+        for i, file in enumerate(filenames):
+            f = path.join(self.SCRIPTS_FOLDER, file)
+            if path.exists(f):
+                logger.info(f"Making script executable: {file} ...")
+                run_command(f"chmod +x {f}", timeout=10)
+                logger.info(f"Executing script: {file} ...")
+                run_command(f, timeout=600)
+                if callable(on_progress):
+                    on_progress(float(100.0 * i / len(filenames)))
+
+        if callable(on_progress):
+            on_progress(100.0)
 
     def complete_onboarding(self, on_progress: Optional[Callable] = None) -> None:
         if onboarding_completed():
