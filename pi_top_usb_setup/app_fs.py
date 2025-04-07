@@ -5,7 +5,6 @@ from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
 from pt_os_web_portal.backend.helpers.finalise import (
-    configure_landing,
     deprioritise_openbox_session,
     disable_ap_mode,
     enable_firmware_updater_service,
@@ -13,7 +12,7 @@ from pt_os_web_portal.backend.helpers.finalise import (
     enable_pt_miniscreen,
     onboarding_completed,
     restore_files,
-    stop_onboarding_autostart,
+    stop_first_boot_app_autostart,
     update_eeprom,
 )
 from pt_os_web_portal.backend.helpers.keyboard import set_keyboard_layout
@@ -188,8 +187,7 @@ class AppFilesystem:
             enable_further_link_service,
             deprioritise_openbox_session,
             restore_files,
-            configure_landing,
-            stop_onboarding_autostart,
+            stop_first_boot_app_autostart,
             update_eeprom,
             enable_pt_miniscreen,
             disable_ap_mode,
