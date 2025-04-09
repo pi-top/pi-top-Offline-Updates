@@ -2,7 +2,7 @@ import json
 import logging
 from os import listdir, makedirs, path, walk
 from pathlib import Path
-from shutil import copy2
+from shutil import copy2, rmtree
 from typing import Callable, Optional
 
 from pitop.common.command_runner import run_command
@@ -102,6 +102,17 @@ class AppFilesystem:
         if not Path(filename).exists():
             logger.warning(f"File '{filename}' doesn't exist; skipping extraction")
             return
+
+        if Path(self.SETUP_FOLDER).exists():
+            logger.warning(
+                f"Setup folder '{self.SETUP_FOLDER}' already exists, removing it ..."
+            )
+            try:
+                rmtree(self.SETUP_FOLDER)
+            except Exception as e:
+                raise ExtractionError(
+                    f"Error removing existing setup folder '{self.SETUP_FOLDER}': {e}"
+                )
 
         # Get extracted size of the tar.gz file
         try:
