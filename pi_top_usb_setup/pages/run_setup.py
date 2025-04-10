@@ -56,8 +56,10 @@ class RunStates(Enum):
     INIT = 0
     EXTRACTING_TAR = 5
     UPDATING_SYSTEM = 25
-    CONFIGURING_DEVICE = 90
-    COMPLETING_ONBOARDING = 95
+    CONFIGURING_DEVICE = 80
+    COPYING_FILES = 85
+    COMPLETING_ONBOARDING = 90
+    RUNNING_SCRIPTS = 95
     DONE = 100
 
 
@@ -68,6 +70,8 @@ class AppErrors(Enum):
     EXTRACTION = 3
     CONFIGURATION_ERROR = 4
     ONBOARDING_ERROR = 5
+    COPY_ERROR = 6
+    SCRIPTS_ERROR = 7
 
 
 class RunSetupPage(Component, HasGutterIcons):
@@ -118,8 +122,14 @@ class RunSetupPage(Component, HasGutterIcons):
             # Update packages
             self._update_system()
 
-            # Configure device
+            # Configure device: process json file
             self._configure_device()
+
+            # Copy files over to the device
+            self._copy_files_to_device()
+
+            # Run scripts
+            self._run_scripts()
 
             # Finish onboarding if necessary
             self._complete_onboarding()
@@ -138,7 +148,7 @@ class RunSetupPage(Component, HasGutterIcons):
                     "Device setup is complete! Press any button to reboot the device!"
                 )
             elif self.state.get("run_state") == RunStates.ERROR:
-                message = "There was an error during setup. Press any button to exit."
+                message = f"There was an error during setup: E{self.state.get('error').value}. Press any button to exit."
                 if self.state.get("error") == AppErrors.NOT_ENOUGH_SPACE:
                     message = "There's not enough free space in your pi-top to continue. Press any button to exit"
             self.on_complete(
@@ -231,6 +241,20 @@ class RunSetupPage(Component, HasGutterIcons):
             )
             raise Exception(f"Config Error: {e}")
 
+    def _copy_files_to_device(self):
+        self.state.update({"run_state": RunStates.COPYING_FILES})
+        try:
+            self.fs.copy_files(
+                on_progress=lambda percentage: self.state.update(
+                    {"copy_progress": percentage}
+                ),
+            )
+        except Exception as e:
+            self.state.update(
+                {"run_state": RunStates.ERROR, "error": AppErrors.COPY_ERROR}
+            )
+            raise Exception(f"Copy Error: {e}")
+
     def _complete_onboarding(self):
         self.state.update({"run_state": RunStates.COMPLETING_ONBOARDING})
         try:
@@ -244,6 +268,20 @@ class RunSetupPage(Component, HasGutterIcons):
                 {"run_state": RunStates.ERROR, "error": AppErrors.ONBOARDING_ERROR}
             )
             raise Exception(f"Onboarding Error: {e}")
+
+    def _run_scripts(self):
+        self.state.update({"run_state": RunStates.RUNNING_SCRIPTS})
+        try:
+            self.fs.run_scripts(
+                on_progress=lambda percentage: self.state.update(
+                    {"scripts_progress": percentage}
+                ),
+            )
+        except Exception as e:
+            self.state.update(
+                {"run_state": RunStates.ERROR, "error": AppErrors.SCRIPTS_ERROR}
+            )
+            raise Exception(f"Scripts Error: {e}")
 
     def _current_progress(self):
         state = self.state.get("run_state")
@@ -267,6 +305,18 @@ class RunSetupPage(Component, HasGutterIcons):
             value += (
                 self.state.get("config_progress", 0)
                 / 100
+                * (RunStates.COPYING_FILES.value - value)
+            )
+        elif state is RunStates.COPYING_FILES:
+            value += (
+                self.state.get("copy_progress", 0)
+                / 100
+                * (RunStates.RUNNING_SCRIPTS.value - value)
+            )
+        elif state is RunStates.RUNNING_SCRIPTS:
+            value += (
+                self.state.get("scripts_progress", 0)
+                / 100
                 * (RunStates.COMPLETING_ONBOARDING.value - value)
             )
         elif state is RunStates.COMPLETING_ONBOARDING:
@@ -275,6 +325,7 @@ class RunSetupPage(Component, HasGutterIcons):
                 / 100
                 * (RunStates.DONE.value - value)
             )
+
         return value
 
     def _text(self):

@@ -37,7 +37,10 @@ class SystemUpdater:
         on_error: Optional[Callable] = None,
     ) -> None:
         self.apt_repository = apt_repository
-        if self.apt_repository and not Path(self.apt_repository).exists():
+        if (
+            self.apt_repository
+            and not Path(self.apt_repository).joinpath("Packages").exists()
+        ):
             raise NotAnAptRepository(
                 f"Couldn't find a repository in {self.apt_repository}"
             )

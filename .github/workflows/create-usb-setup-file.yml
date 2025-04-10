@@ -18,7 +18,7 @@ env:
 
 jobs:
   download-packages:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +145,7 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
 
   create-combined-bundle-file:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     needs: [download-packages]
     steps:
       - name: Download artifacts from previous job
