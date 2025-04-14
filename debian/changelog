@@ -1,3 +1,17 @@
+pi-top-usb-setup-src (0.2.0-4) bullseye; urgency=medium
+
+  * Updated master workflow files
+  * Updated master workflow files
+  * Updated master workflow files
+  * Updated master workflow files
+  * Update pt-os-web-portal imports (#28)
+  * Update workflow files to use Ubuntu 24.04 instead of 20.04
+  * Support copying files and running scripts from bundle file
+  * Handle empty updates folder
+  * Remove existing setup folder before extracting tar file
+
+ -- pi-top <deb-maintainers@pi-top.com>  Mon, 14 Apr 2025 14:57:56 +0000
+
 pi-top-usb-setup-src (0.2.0-3) bullseye; urgency=medium
 
   * Add disk space to OS image on CI to avoid running out of space (#23)
