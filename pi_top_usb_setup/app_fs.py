@@ -242,8 +242,10 @@ class AppFilesystem:
                     )
                     on_progress(progress)
 
-            if files_copied > 0 and data.get("command"):
-                run_command(data.get("command"), timeout=60)
+            command = data.get("command")
+            if files_copied > 0 and command:
+                logger.info(f"Running command '{command}' ...")
+                run_command(command, timeout=60)
 
     def copy_files(self, on_progress: Optional[Callable] = None) -> None:
         if not Path(self.FOLDER_TO_COPY).exists():
