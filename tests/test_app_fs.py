@@ -300,3 +300,126 @@ def test_run_scripts_on_error_raises_exception(mock_run_command, app_fs):
             call(f"chmod +x {app.SCRIPTS_FOLDER}/02-script.sh", timeout=10),
         ]
     )
+
+
+def test_install_certificates_when_no_certificates_folder_exists(
+    mock_copy2, mock_run_command, app_fs
+):
+    # Test behavior when certificates folder does not exist
+    structure = {
+        "pi-top-usb-setup.tar.gz": "",
+        "pi-top-usb-setup": {},
+    }
+    app = app_fs(structure)
+    app.install_certificates()
+    mock_copy2.assert_not_called()
+    mock_run_command.assert_not_called()
+
+
+def test_install_certificates_when_folder_is_empty(
+    mock_run_command, mock_copy2, app_fs
+):
+    # Test behavior when certificates folder is empty
+    structure = {
+        "pi-top-usb-setup.tar.gz": "",
+        "pi-top-usb-setup": {
+            "certificates": {},
+        },
+    }
+    app = app_fs(structure)
+    # reset mock_run_command - it's used in constructor
+    mock_run_command.reset_mock()
+
+    app.install_certificates()
+    mock_copy2.assert_not_called()
+    mock_run_command.assert_not_called()
+
+
+def test_install_certificates_when_ca_certificates_folder_is_empty(
+    mock_run_command, mock_copy2, app_fs
+):
+    # Test behavior when the ca-certificates folder inside the certificates folder is empty
+    structure = {
+        "pi-top-usb-setup.tar.gz": "",
+        "pi-top-usb-setup": {
+            "certificates": {
+                "ca-certificates": {},
+            },
+        },
+    }
+    app = app_fs(structure)
+    # reset mock_run_command - it's used in constructor
+    mock_run_command.reset_mock()
+
+    app.install_certificates()
+    mock_copy2.assert_not_called()
+    mock_run_command.assert_not_called()
+
+
+def test_install_certificates_when_invalid_folder_is_found(
+    mock_run_command, mock_copy2, app_fs
+):
+    # Test behavior when an invalid folder is found inside the certificates folder
+    structure = {
+        "pi-top-usb-setup.tar.gz": "",
+        "pi-top-usb-setup": {
+            "certificates": {
+                "invalid-folder": {
+                    "client.pem": "",
+                },
+            },
+        },
+    }
+    app = app_fs(structure)
+
+    # reset mock_run_command - it's used in constructor
+    mock_run_command.reset_mock()
+
+    app.install_certificates()
+    mock_copy2.assert_not_called()
+    mock_run_command.assert_not_called()
+
+
+def test_install_certificates_when_valid_folder_is_found(
+    mock_run_command, mock_copy2, mock_makedirs, app_fs
+):
+    # Test behavior when a valid folder is found inside the certificates folder
+    structure = {
+        "pi-top-usb-setup.tar.gz": "",
+        "pi-top-usb-setup": {
+            "certificates": {
+                "ca-certificates": {
+                    "client.pem": "",
+                    "server.pem": "",
+                },
+            },
+        },
+    }
+    app = app_fs(structure)
+
+    # reset mock_run_command - it's used in constructor
+    mock_run_command.reset_mock()
+
+    app.install_certificates()
+
+    # The folder is created
+    mock_makedirs.assert_has_calls(
+        [
+            call("/usr/local/share/ca-certificates", exist_ok=True),
+        ]
+    )
+    # Files are copied to the correct folder
+    mock_copy2.assert_has_calls(
+        [
+            call(
+                f"{app.CERTIFICATES_FOLDER}/ca-certificates/server.pem",
+                "/usr/local/share/ca-certificates",
+            ),
+            call(
+                f"{app.CERTIFICATES_FOLDER}/ca-certificates/client.pem",
+                "/usr/local/share/ca-certificates",
+            ),
+        ]
+    )
+    # The associated command is run
+    mock_run_command.assert_called_once_with("update-ca-certificates", timeout=60)

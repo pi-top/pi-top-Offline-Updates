@@ -57,6 +57,7 @@ class RunStates(Enum):
     EXTRACTING_TAR = 5
     UPDATING_SYSTEM = 25
     CONFIGURING_DEVICE = 80
+    INSTALLING_CERTIFICATES = 82
     COPYING_FILES = 85
     COMPLETING_ONBOARDING = 90
     RUNNING_SCRIPTS = 95
@@ -72,6 +73,7 @@ class AppErrors(Enum):
     ONBOARDING_ERROR = 5
     COPY_ERROR = 6
     SCRIPTS_ERROR = 7
+    CERTIFICATE_INSTALLATION_ERROR = 8
 
 
 class RunSetupPage(Component, HasGutterIcons):
@@ -124,6 +126,9 @@ class RunSetupPage(Component, HasGutterIcons):
 
             # Configure device: process json file
             self._configure_device()
+
+            # Copy certficates over to the device
+            self._install_certificates()
 
             # Copy files over to the device
             self._copy_files_to_device()
@@ -241,6 +246,23 @@ class RunSetupPage(Component, HasGutterIcons):
             )
             raise Exception(f"Config Error: {e}")
 
+    def _install_certificates(self):
+        self.state.update({"run_state": RunStates.INSTALLING_CERTIFICATES})
+        try:
+            self.fs.install_certificates(
+                on_progress=lambda percentage: self.state.update(
+                    {"certificate_progress": percentage}
+                ),
+            )
+        except Exception as e:
+            self.state.update(
+                {
+                    "run_state": RunStates.ERROR,
+                    "error": AppErrors.CERTIFICATE_INSTALLATION_ERROR,
+                }
+            )
+            raise Exception(f"Certificate Installation Error: {e}")
+
     def _copy_files_to_device(self):
         self.state.update({"run_state": RunStates.COPYING_FILES})
         try:
@@ -305,8 +327,15 @@ class RunSetupPage(Component, HasGutterIcons):
             value += (
                 self.state.get("config_progress", 0)
                 / 100
+                * (RunStates.INSTALLING_CERTIFICATES.value - value)
+            )
+        elif state is RunStates.INSTALLING_CERTIFICATES:
+            value += (
+                self.state.get("certificate_progress", 0)
+                / 100
                 * (RunStates.COPYING_FILES.value - value)
             )
+
         elif state is RunStates.COPYING_FILES:
             value += (
                 self.state.get("copy_progress", 0)
