@@ -17,8 +17,10 @@ click_logging.basic_config(logger)
 @click.version_option()
 @click.argument("mount_point", type=click.Path(exists=True))
 @click.option("--skip-dialog", is_flag=True)
-@click.option("--skip-update", is_flag=True)
-def main(mount_point, skip_dialog, skip_update) -> None:
+def main(
+    mount_point,
+    skip_dialog,
+) -> None:
     try:
         AppFilesystem(mount_point)
     except Exception as e:
@@ -27,8 +29,6 @@ def main(mount_point, skip_dialog, skip_update) -> None:
 
     if skip_dialog:
         os.environ["PT_USB_SETUP_SKIP_DIALOG"] = "1"
-    if skip_update:
-        os.environ["PT_USB_SETUP_SKIP_UPDATE"] = "1"
     if mount_point:
         os.environ["PT_USB_SETUP_MOUNT_POINT"] = mount_point
 
