@@ -16,6 +16,8 @@ a udev rule starts a systemd service that extracts the tarball and runs the setu
 The setup script updates the system using a local apt repository with the files in the USB drive,
 and the uses a JSON file to set the locales, language, keyboard layout and wi-fi network.
 
+Each step of the setup process is optional and can be disabled by setting the corresponding
+key to `false` in the JSON file located in `/var/lib/pi-top-usb-setup/state.cfg`.
 
 -------------------------------------------
 File structure for pi-top-usb-setup.tar.gz
@@ -25,6 +27,12 @@ File structure for pi-top-usb-setup.tar.gz
 
     pi-top-usb-setup/
         pi-top_config.json
+        certificates/
+            # certificates to install
+            ca-certificates/
+                cert1.crt
+                cert2.crt
+                ...
         files/
             # files to copy to root of pi-top
             # e.g. to copy certificates create this nested folder structure
@@ -71,3 +79,24 @@ Sample JSON file to configure the device:
             },
         },
     }
+
+
+--------------------------------
+State configuration file
+--------------------------------
+
+The application configuration file is located in `/var/lib/pi-top-usb-setup/state.cfg` and
+contains the state of the setup process.
+
+A sample of the file with the default values is the following:
+
+.. code-block:: text
+
+    [app]
+    install_update = true
+    install_certificates = true
+    copy_files = true
+    run_scripts = true
+    install_network = true
+    complete_onboarding = true
+    configure_device = true
