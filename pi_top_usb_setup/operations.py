@@ -28,128 +28,96 @@ from pi_top_usb_setup.network import Network
 from pi_top_usb_setup.utils import (
     drive_has_enough_free_space,
     extract_file,
-    get_linux_distro,
     get_tar_gz_extracted_size,
     print_folder_recursively,
-    umount_usb_drive,
 )
+
+from .usb_file_structure import UsbSetupStructure
 
 logger = logging.getLogger(__name__)
 
 
-class AppFilesystem:
-    USB_SETUP_FILENAME_GLOB = "pi-top-usb-setup*.tar.gz"
-    TEMP_FOLDER = "/tmp"
-    CERTIFICATES_LOOKUP = {
-        "ca-certificates": {
-            "path": "/usr/local/share/ca-certificates",
-            "command": "update-ca-certificates",
-        }
-    }
-
-    def __init__(self, mount_point: str) -> None:
-        self.MOUNT_POINT = mount_point
-        self.USB_SETUP_FILE = f"{mount_point}/pi-top-usb-setup.tar.gz"
-        self.SETUP_FOLDER = f"{self.TEMP_FOLDER}/pi-top-usb-setup"
-        self.DEVICE_CONFIG = f"{self.SETUP_FOLDER}/pi-top_config.json"
-        self.FOLDER_TO_COPY = f"{self.SETUP_FOLDER}/files"
-        self.SCRIPTS_FOLDER = f"{self.SETUP_FOLDER}/scripts"
-        self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
-        self.CERTIFICATES_FOLDER = f"{self.SETUP_FOLDER}/certificates"
-        if get_linux_distro() == "bookworm":
-            self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates_bookworm"
-
-        if not any(
-            [
-                len(self._find_setup_files()) > 0,
-                Path(self.UPDATES_FOLDER).is_dir(),
-            ]
-        ):
-            raise Exception(
-                f"Files '{self.MOUNT_POINT}/{self.USB_SETUP_FILENAME_GLOB}' or {self.UPDATES_FOLDER} not found, exiting ..."
-            )
+class Operations:
+    def __init__(self, fs: UsbSetupStructure) -> None:
+        self.fs = fs
 
         self.requires_reboot = False
-        self.device = self._get_device(mount_point)
-
+        self.device = self._get_device(str(self.fs.mount_point))
         self.config: Dict = {}
 
-    def _get_device(self, mount_point: str):
-        device = None
+    def _get_device(self, mount_point: str) -> str:
+        device = ""
         if mount_point:
             device = run_command(
                 f"findmnt -n -o SOURCE --target {mount_point}", timeout=5
             ).strip()
         return device
 
-    def _find_setup_files(self):
-        # find all setup files in mount point that match the glob pattern, sorted by date
-        return sorted(
-            Path(self.MOUNT_POINT).glob(self.USB_SETUP_FILENAME_GLOB),
-            key=lambda x: x.stat().st_mtime,
-            reverse=True,
-        )
-
     @property
     def usb_drive_is_present(self) -> bool:
-        return Path(self.device).exists() if self.device else False
-
-    def umount_usb_drive(self) -> None:
-        umount_usb_drive(self.MOUNT_POINT)
+        return Path(self.device).exists()
 
     def extract_setup_file(self, on_progress: Optional[Callable] = None) -> None:
-        files = self._find_setup_files()
+        """Extracts the newest compressed setup bundle found in the mount point"""
+        files = self.fs.find_setup_files()
         if len(files) >= 1:
             logger.info(f"Found {len(files)} setup files; will use '{files[0]}'...")
             self._do_extract_setup_file(files[0], on_progress)
         else:
-            logger.warning("No setup file found; skipping extraction")
+            logger.warning(
+                f"No compressed setup file found in '{self.fs.mount_point}'; skipping extraction"
+            )
 
     def _do_extract_setup_file(
-        self, filename: str, on_progress: Optional[Callable] = None
+        self, filename: Path, on_progress: Optional[Callable] = None
     ) -> None:
-        if not Path(filename).exists():
+        """Extracts the given filename into a temporary folder"""
+        if not filename.exists():
             logger.warning(f"File '{filename}' doesn't exist; skipping extraction")
             return
 
-        if Path(self.SETUP_FOLDER).exists():
+        setup_folder_path = self.fs.folder()
+        if setup_folder_path.exists():
             logger.warning(
-                f"Setup folder '{self.SETUP_FOLDER}' already exists, removing it ..."
+                f"Setup folder '{setup_folder_path}' already exists in the system, removing it ..."
             )
             try:
-                rmtree(self.SETUP_FOLDER)
+                rmtree(setup_folder_path)
             except Exception as e:
                 raise ExtractionError(
-                    f"Error removing existing setup folder '{self.SETUP_FOLDER}': {e}"
+                    f"Error removing existing setup folder '{setup_folder_path}': {e}"
                 )
 
         # Get extracted size of the tar.gz file
         try:
-            space = get_tar_gz_extracted_size(filename)
+            space = get_tar_gz_extracted_size(str(filename))
         except Exception as e:
             raise ExtractionError(f"Error getting extracted size of '{filename}', {e}")
 
         # Check if there's enough free space in the SD card
-        if not drive_has_enough_free_space(drive="/", space=space):
+        drive = "/"
+        if not drive_has_enough_free_space(drive=drive, space=space):
             raise NotEnoughSpaceException(
-                f"Not enough space to extract '{filename}' into {self.TEMP_FOLDER}"
+                f"Not enough space to extract '{filename}' into {drive}"
             )
 
+        temp_folder_path = self.fs.temp_folder()
         try:
             extract_file(
-                file=filename,
-                destination=self.TEMP_FOLDER,
+                file=str(filename),
+                destination=str(temp_folder_path),
                 on_progress=on_progress,
             )
-            logger.info(f"File {filename} extracted into {self.TEMP_FOLDER}")
+            logger.info(f"File {filename} extracted into {temp_folder_path}")
         except Exception as e:
             raise ExtractionError(f"Error extracting '{filename}': {e}")
 
     def read_config_file(self) -> None:
-        config_file_path = self.DEVICE_CONFIG
-        if not Path(config_file_path).exists():
+        """Reads the configuration JSON file from the setup bundle into a dictionary"""
+        config_file_path = self.fs.json_file()
+        if not config_file_path.exists():
             logger.info(
-                f"No device configuration file '{config_file_path}' found; skipping...."
+                f"No device configuration file found in '{config_file_path}'; skipping...."
             )
             return
 
@@ -160,9 +128,7 @@ class AppFilesystem:
         self.config = config
 
     def configure_device(self, on_progress: Optional[Callable] = None) -> None:
-        if not Path(self.DEVICE_CONFIG).exists():
-            logger.info("No device configuration file found; skipping....")
-            return
+        """Configures the device based on the configuration file"""
 
         # setting the keyboard layout requires a layout and a variant
         lookup = {
@@ -175,7 +141,6 @@ class AppFilesystem:
             "email": set_registration_email,
         }
 
-        logger.info(f"Configuring device using {self.DEVICE_CONFIG}")
         for i, (key, function) in enumerate(lookup.items()):
             if key not in self.config:
                 logger.info(f"'{key}' not found in configuration file, skipping...")
@@ -197,12 +162,6 @@ class AppFilesystem:
                 logger.error(f"{e}")
 
     def set_network(self, on_progress: Optional[Callable] = None) -> None:
-        if not Path(self.DEVICE_CONFIG).exists():
-            logger.info("No device configuration file found; skipping....")
-            return
-
-        logger.info(f"Setting network using {self.DEVICE_CONFIG}")
-
         network_data = self.config.get("network")
         if network_data is None:
             logger.info("No network data found in configuration file, skipping...")
@@ -219,20 +178,22 @@ class AppFilesystem:
             on_progress(100.0)
 
     def install_certificates(self, on_progress: Optional[Callable] = None) -> None:
-        if not Path(self.CERTIFICATES_FOLDER).exists():
+        """Installs the certificates from the setup bundle into the device"""
+        certificates_folder_path = self.fs.certificates_folder()
+        if not certificates_folder_path.exists():
             logger.info("No certificates to install; skipping...")
             return
 
         try:
-            print_folder_recursively(self.CERTIFICATES_FOLDER)
+            print_folder_recursively(str(certificates_folder_path))
         except Exception as e:
-            logger.error(f"Error listing files in {self.CERTIFICATES_FOLDER}: {e}")
+            logger.error(f"Error listing files in {certificates_folder_path}: {e}")
 
-        for index, (key, data) in enumerate(self.CERTIFICATES_LOOKUP.items()):
+        for index, (key, data) in enumerate(self.fs.CERTIFICATE_PATHS.items()):
             dst = data["path"]
-            progress_factor = int((index / len(self.CERTIFICATES_LOOKUP)))
+            progress_factor = int((index / len(self.fs.CERTIFICATE_PATHS)))
 
-            folder = f"{self.CERTIFICATES_FOLDER}/{key}"
+            folder = f"{certificates_folder_path}/{key}"
             if not path.isdir(folder):
                 continue
 
@@ -263,26 +224,26 @@ class AppFilesystem:
                 run_command(command, timeout=60)
 
     def copy_files(self, on_progress: Optional[Callable] = None) -> None:
-        if not Path(self.FOLDER_TO_COPY).exists():
+        """Copies the files from the files directory of the setup bundle into the device"""
+        files_folder_path = self.fs.files_folder()
+        if not files_folder_path.exists():
             logger.info("No files to copy; skipping...")
             return
 
         try:
-            print_folder_recursively(self.FOLDER_TO_COPY)
+            print_folder_recursively(str(files_folder_path))
         except Exception as e:
-            logger.error(f"Error listing files in {self.FOLDER_TO_COPY}: {e}")
+            logger.error(f"Error listing files in {files_folder_path}: {e}")
 
-        logger.info(f"Copying files from {self.FOLDER_TO_COPY} to {self.MOUNT_POINT}")
-
-        total_files = sum(len(files) for _, _, files in walk(self.FOLDER_TO_COPY))
+        total_files = sum(len(files) for _, _, files in walk(str(files_folder_path)))
         files_copied = 0
 
-        for root, dirs, files in walk(self.FOLDER_TO_COPY):
+        for root, dirs, files in walk(str(files_folder_path)):
             for file in files:
                 source_path = path.join(root, file)
 
                 # Get the relative path from the source_dir
-                relative_path = path.relpath(source_path, self.FOLDER_TO_COPY)
+                relative_path = path.relpath(source_path, str(files_folder_path))
 
                 # Destination path based on root
                 destination_path = path.join("/", relative_path)
@@ -292,7 +253,7 @@ class AppFilesystem:
 
                 # Copy file
                 copy2(source_path, destination_path)
-                logging.info(f"Copied: {source_path} to {destination_path}")
+                logger.info(f"Copied file {source_path} to {destination_path}")
 
                 # Update progress
                 files_copied += 1
@@ -301,20 +262,22 @@ class AppFilesystem:
                     on_progress(progress)
 
     def run_scripts(self, on_progress: Optional[Callable] = None) -> None:
-        if not Path(self.SCRIPTS_FOLDER).exists():
+        """Runs the scripts from the scripts directory of the setup bundle"""
+        scripts_folder_path = self.fs.scripts_folder()
+        if not scripts_folder_path.exists():
             logger.info("No scripts to run; skipping...")
             return
 
         try:
-            print_folder_recursively(self.SCRIPTS_FOLDER)
+            print_folder_recursively(str(scripts_folder_path))
         except Exception as e:
-            logger.error(f"Error listing files in {self.SCRIPTS_FOLDER}: {e}")
+            logger.error(f"Error listing files in {scripts_folder_path}: {e}")
 
-        logger.info(f"Running scripts from {self.SCRIPTS_FOLDER}")
+        logger.info(f"Running scripts from {scripts_folder_path}")
 
-        filenames = sorted(listdir(self.SCRIPTS_FOLDER))
+        filenames = sorted(listdir(scripts_folder_path))
         for i, file in enumerate(filenames):
-            f = path.join(self.SCRIPTS_FOLDER, file)
+            f = path.join(scripts_folder_path, file)
             if path.exists(f):
                 logger.info(f"Making script executable: {file} ...")
                 run_command(f"chmod +x {f}", timeout=10)
@@ -327,6 +290,7 @@ class AppFilesystem:
             on_progress(100.0)
 
     def complete_onboarding(self, on_progress: Optional[Callable] = None) -> None:
+        """Completes the onboarding process for the device"""
         if onboarding_completed():
             logger.info("Device already onboarded")
             return

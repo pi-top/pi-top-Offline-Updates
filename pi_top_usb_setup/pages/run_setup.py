@@ -11,17 +11,19 @@ from pt_miniscreen.core.component import Component
 from pt_miniscreen.core.components import Text
 from pt_miniscreen.core.utils import apply_layers, layer
 
-from pi_top_usb_setup.app_fs import AppFilesystem
 from pi_top_usb_setup.exceptions import (
     ExtractionError,
     NotAnAptRepository,
     NotEnoughSpaceException,
 )
+from pi_top_usb_setup.operations import Operations
 from pi_top_usb_setup.system_updater import SystemUpdater
+from pi_top_usb_setup.usb_file_structure import UsbSetupStructure
 from pi_top_usb_setup.utils import (
     RestartingSystemdService,
     get_package_version,
     restart_service_and_skip_user_confirmation_dialog,
+    umount_usb_drive,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,7 +117,8 @@ class RunSetupPage(Component, HasGutterIcons):
             logger.error(f"Couldn't create state manager: {e}")
 
         try:
-            self.fs = AppFilesystem(mount_point=os.environ["PT_USB_SETUP_MOUNT_POINT"])
+            self.fs = UsbSetupStructure(os.environ["PT_USB_SETUP_MOUNT_POINT"])
+            self.operations = Operations(self.fs)
         except Exception as e:
             logger.error(f"{e}")
             raise e
@@ -141,11 +144,11 @@ class RunSetupPage(Component, HasGutterIcons):
             # Extract compressed file
             self._extract_file()
 
-            # Read JSON file
-            self.fs.read_config_file()
+            # Read the JSON file
+            self.operations.read_config_file()
 
             # Umount USB drive
-            self.fs.umount_usb_drive()
+            umount_usb_drive(os.environ["PT_USB_SETUP_MOUNT_POINT"])
 
             # Update packages
             self._update_system()
@@ -177,7 +180,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         if callable(self.on_complete):
             message = "Device setup is complete! Press any button to exit."
-            if self.fs.requires_reboot:
+            if self.operations.requires_reboot:
                 message = (
                     "Device setup is complete! Press any button to reboot the device!"
                 )
@@ -186,13 +189,13 @@ class RunSetupPage(Component, HasGutterIcons):
                 if self.state.get("error") == AppErrors.NOT_ENOUGH_SPACE:
                     message = "There's not enough free space in your pi-top to continue. Press any button to exit"
             self.on_complete(
-                {"message": message, "requires_reboot": self.fs.requires_reboot}
+                {"message": message, "requires_reboot": self.operations.requires_reboot}
             )
 
     def _extract_file(self):
         self.state.update({"run_state": RunStates.EXTRACTING_TAR})
         try:
-            self.fs.extract_setup_file(
+            self.operations.extract_setup_file(
                 on_progress=lambda percentage: self.state.update(
                     {"tar_progress": percentage}
                 )
@@ -228,7 +231,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         try:
             updater = SystemUpdater(
-                apt_repository=self.fs.UPDATES_FOLDER,
+                apt_repository=str(self.fs.updates_folder()),
                 on_progress=lambda percentage: self.state.update(
                     {"apt_progress": percentage}
                 ),
@@ -256,7 +259,7 @@ class RunSetupPage(Component, HasGutterIcons):
                     f"Package 'pi-top-usb-setup' was updated from '{version_before_update}' to '{version_after_update}', restarting app..."
                 )
                 restart_service_and_skip_user_confirmation_dialog(
-                    mount_point=self.fs.SETUP_FOLDER
+                    mount_point=str(self.fs.folder())
                 )
                 raise RestartingSystemdService
 
@@ -283,7 +286,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.CONFIGURING_DEVICE})
         try:
-            self.fs.configure_device(
+            self.operations.configure_device(
                 on_progress=lambda percentage: self.state.update(
                     {"config_progress": percentage}
                 ),
@@ -325,7 +328,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.INSTALLING_CERTIFICATES})
         try:
-            self.fs.install_certificates(
+            self.operations.install_certificates(
                 on_progress=lambda percentage: self.state.update(
                     {"certificate_progress": percentage}
                 ),
@@ -346,7 +349,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.COPYING_FILES})
         try:
-            self.fs.copy_files(
+            self.operations.copy_files(
                 on_progress=lambda percentage: self.state.update(
                     {"copy_progress": percentage}
                 ),
@@ -364,7 +367,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.COMPLETING_ONBOARDING})
         try:
-            self.fs.complete_onboarding(
+            self.operations.complete_onboarding(
                 on_progress=lambda percentage: self.state.update(
                     {"onboarding_progress": percentage}
                 ),
@@ -382,7 +385,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.RUNNING_SCRIPTS})
         try:
-            self.fs.run_scripts(
+            self.operations.run_scripts(
                 on_progress=lambda percentage: self.state.update(
                     {"scripts_progress": percentage}
                 ),
@@ -459,7 +462,10 @@ class RunSetupPage(Component, HasGutterIcons):
     def _text(self):
         run_state = self.state.get("run_state")
         # If the USB device is still connected ...
-        if run_state == RunStates.UPDATING_SYSTEM and self.fs.usb_drive_is_present:
+        if (
+            run_state == RunStates.UPDATING_SYSTEM
+            and self.operations.usb_drive_is_present
+        ):
             return "You can remove the USB drive; setup process will continue"
 
         return str(self._wait_text)
