@@ -9,14 +9,14 @@ import pytest
 
 @pytest.fixture
 def mock_copy2():
-    # mock pi_top_usb_setup.app_fs.copy2
-    with patch("pi_top_usb_setup.app_fs.copy2") as copy_mock:
+    # mock pi_top_usb_setup.operations.copy2
+    with patch("pi_top_usb_setup.operations.copy2") as copy_mock:
         yield copy_mock
 
 
 @pytest.fixture
 def mock_makedirs():
-    with patch("pi_top_usb_setup.app_fs.makedirs") as makedirs_mock:
+    with patch("pi_top_usb_setup.operations.makedirs") as makedirs_mock:
         yield makedirs_mock
 
 
@@ -62,27 +62,31 @@ def create_mount_point():
 
 
 @pytest.fixture
-def app_fs(create_mount_point):
+def operations(create_mount_point):
     created_dirs = []
 
-    def _create_app_fs(files: Optional[dict] = None):
+    def _create_operations_obj(files: Optional[dict] = None):
 
         temp_dir = create_mount_point(files)
         created_dirs.append(temp_dir)
 
-        from pi_top_usb_setup.app_fs import AppFilesystem
+        from pi_top_usb_setup.operations import Operations
+        from pi_top_usb_setup.usb_file_structure import UsbSetupStructure
 
-        AppFilesystem.TEMP_FOLDER = temp_dir
-        return AppFilesystem(temp_dir)
+        usb_setup_structure = UsbSetupStructure(temp_dir)
+        usb_setup_structure.temp_folder_path = pathlib.Path(temp_dir)
+        return Operations(usb_setup_structure)
 
-    yield _create_app_fs
+    yield _create_operations_obj
 
     # Cleanup all created directories
     for temp_dir in created_dirs:
         shutil.rmtree(temp_dir)
 
 
-def test_copy_files_creates_file_structure_in_target(mock_copy2, mock_makedirs, app_fs):
+def test_copy_files_creates_file_structure_in_target(
+    mock_copy2, mock_makedirs, operations
+):
     # Test basic copy
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -97,10 +101,10 @@ def test_copy_files_creates_file_structure_in_target(mock_copy2, mock_makedirs, 
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
     app.copy_files()
 
-    base_path = app.FOLDER_TO_COPY
+    base_path = app.fs.files_folder()
 
     # Directories are created
     mock_makedirs.assert_has_calls(
@@ -119,7 +123,7 @@ def test_copy_files_creates_file_structure_in_target(mock_copy2, mock_makedirs, 
     )
 
 
-def test_copy_files_calls_progress_callback(mock_copy2, mock_makedirs, app_fs):
+def test_copy_files_calls_progress_callback(mock_copy2, mock_makedirs, operations):
     # Test that progress callback is called
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -139,7 +143,7 @@ def test_copy_files_calls_progress_callback(mock_copy2, mock_makedirs, app_fs):
         },
     }
     progress_callback = Mock()
-    app = app_fs(structure)
+    app = operations(structure)
     app.copy_files(on_progress=progress_callback)
     progress_callback.assert_has_calls(
         [
@@ -151,7 +155,7 @@ def test_copy_files_calls_progress_callback(mock_copy2, mock_makedirs, app_fs):
     )
 
 
-def test_copy_files_on_files_folder_without_files(mock_copy2, app_fs):
+def test_copy_files_on_files_folder_without_files(mock_copy2, operations):
     # Test behavior when files folder is empty
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -159,23 +163,23 @@ def test_copy_files_on_files_folder_without_files(mock_copy2, app_fs):
             "files": {},
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
     app.copy_files()
     mock_copy2.assert_not_called()
 
 
-def test_copy_files_when_files_folder_does_not_exist(mock_copy2, app_fs):
+def test_copy_files_when_files_folder_does_not_exist(mock_copy2, operations):
     # Test behavior when files folder does not exist
     structure = {
         "pi-top-usb-setup.tar.gz": "",
         "pi-top-usb-setup": {},
     }
-    app = app_fs(structure)
+    app = operations(structure)
     app.copy_files()
     mock_copy2.assert_not_called()
 
 
-def test_run_scripts_on_scripts_folder_without_files(mock_run_command, app_fs):
+def test_run_scripts_on_scripts_folder_without_files(mock_run_command, operations):
     # Test behavior when scripts folder is empty
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -183,7 +187,7 @@ def test_run_scripts_on_scripts_folder_without_files(mock_run_command, app_fs):
             "scripts": {},
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
@@ -192,13 +196,13 @@ def test_run_scripts_on_scripts_folder_without_files(mock_run_command, app_fs):
     mock_run_command.assert_not_called()
 
 
-def test_run_scripts_when_scripts_folder_does_not_exist(mock_run_command, app_fs):
+def test_run_scripts_when_scripts_folder_does_not_exist(mock_run_command, operations):
     # Test behavior when scripts folder does not exist
     structure = {
         "pi-top-usb-setup.tar.gz": "",
         "pi-top-usb-setup": {},
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
@@ -207,7 +211,7 @@ def test_run_scripts_when_scripts_folder_does_not_exist(mock_run_command, app_fs
     mock_run_command.assert_not_called()
 
 
-def test_run_scripts_in_order(mock_run_command, app_fs):
+def test_run_scripts_in_order(mock_run_command, operations):
     # Scripts are run in order based on filename
     print(f"call: {call}")
     structure = {
@@ -221,27 +225,28 @@ def test_run_scripts_in_order(mock_run_command, app_fs):
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
     app.run_scripts()
 
+    scripts_folder = app.fs.scripts_folder()
     mock_run_command.assert_has_calls(
         [
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/01-script.sh", timeout=10),
-            call(f"{app.SCRIPTS_FOLDER}/01-script.sh", timeout=600),
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/02-script.sh", timeout=10),
-            call(f"{app.SCRIPTS_FOLDER}/02-script.sh", timeout=600),
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/10-script.sh", timeout=10),
-            call(f"{app.SCRIPTS_FOLDER}/10-script.sh", timeout=600),
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/99-script.sh", timeout=10),
-            call(f"{app.SCRIPTS_FOLDER}/99-script.sh", timeout=600),
+            call(f"chmod +x {scripts_folder}/01-script.sh", timeout=10),
+            call(f"{scripts_folder}/01-script.sh", timeout=600),
+            call(f"chmod +x {scripts_folder}/02-script.sh", timeout=10),
+            call(f"{scripts_folder}/02-script.sh", timeout=600),
+            call(f"chmod +x {scripts_folder}/10-script.sh", timeout=10),
+            call(f"{scripts_folder}/10-script.sh", timeout=600),
+            call(f"chmod +x {scripts_folder}/99-script.sh", timeout=10),
+            call(f"{scripts_folder}/99-script.sh", timeout=600),
         ]
     )
 
 
-def test_run_scripts_executes_callback_on_progress(app_fs):
+def test_run_scripts_executes_callback_on_progress(operations):
     # on_progress callback is called with correct progress
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -254,7 +259,7 @@ def test_run_scripts_executes_callback_on_progress(app_fs):
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     on_progress_callback = Mock()
     app.run_scripts(on_progress=on_progress_callback)
@@ -269,7 +274,7 @@ def test_run_scripts_executes_callback_on_progress(app_fs):
     )
 
 
-def test_run_scripts_on_error_raises_exception(mock_run_command, app_fs):
+def test_run_scripts_on_error_raises_exception(mock_run_command, operations):
     # on error, the script is skipped and the next script is executed
     structure = {
         "pi-top-usb-setup.tar.gz": "",
@@ -280,7 +285,7 @@ def test_run_scripts_on_error_raises_exception(mock_run_command, app_fs):
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
@@ -293,31 +298,32 @@ def test_run_scripts_on_error_raises_exception(mock_run_command, app_fs):
     with pytest.raises(Exception):
         app.run_scripts()
 
+    scripts_folder = app.fs.scripts_folder()
     mock_run_command.assert_has_calls(
         [
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/01-script.sh", timeout=10),
-            call(f"{app.SCRIPTS_FOLDER}/01-script.sh", timeout=600),
-            call(f"chmod +x {app.SCRIPTS_FOLDER}/02-script.sh", timeout=10),
+            call(f"chmod +x {scripts_folder}/01-script.sh", timeout=10),
+            call(f"{scripts_folder}/01-script.sh", timeout=600),
+            call(f"chmod +x {scripts_folder}/02-script.sh", timeout=10),
         ]
     )
 
 
 def test_install_certificates_when_no_certificates_folder_exists(
-    mock_copy2, mock_run_command, app_fs
+    mock_copy2, mock_run_command, operations
 ):
     # Test behavior when certificates folder does not exist
     structure = {
         "pi-top-usb-setup.tar.gz": "",
         "pi-top-usb-setup": {},
     }
-    app = app_fs(structure)
+    app = operations(structure)
     app.install_certificates()
     mock_copy2.assert_not_called()
     mock_run_command.assert_not_called()
 
 
 def test_install_certificates_when_folder_is_empty(
-    mock_run_command, mock_copy2, app_fs
+    mock_run_command, mock_copy2, operations
 ):
     # Test behavior when certificates folder is empty
     structure = {
@@ -326,7 +332,7 @@ def test_install_certificates_when_folder_is_empty(
             "certificates": {},
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
 
@@ -336,7 +342,7 @@ def test_install_certificates_when_folder_is_empty(
 
 
 def test_install_certificates_when_ca_certificates_folder_is_empty(
-    mock_run_command, mock_copy2, app_fs
+    mock_run_command, mock_copy2, operations
 ):
     # Test behavior when the ca-certificates folder inside the certificates folder is empty
     structure = {
@@ -347,7 +353,7 @@ def test_install_certificates_when_ca_certificates_folder_is_empty(
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
 
@@ -357,7 +363,7 @@ def test_install_certificates_when_ca_certificates_folder_is_empty(
 
 
 def test_install_certificates_when_invalid_folder_is_found(
-    mock_run_command, mock_copy2, app_fs
+    mock_run_command, mock_copy2, operations
 ):
     # Test behavior when an invalid folder is found inside the certificates folder
     structure = {
@@ -370,7 +376,7 @@ def test_install_certificates_when_invalid_folder_is_found(
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
@@ -381,7 +387,7 @@ def test_install_certificates_when_invalid_folder_is_found(
 
 
 def test_install_certificates_when_valid_folder_is_found(
-    mock_run_command, mock_copy2, mock_makedirs, app_fs
+    mock_run_command, mock_copy2, mock_makedirs, operations
 ):
     # Test behavior when a valid folder is found inside the certificates folder
     structure = {
@@ -395,7 +401,7 @@ def test_install_certificates_when_valid_folder_is_found(
             },
         },
     }
-    app = app_fs(structure)
+    app = operations(structure)
 
     # reset mock_run_command - it's used in constructor
     mock_run_command.reset_mock()
@@ -412,11 +418,11 @@ def test_install_certificates_when_valid_folder_is_found(
     mock_copy2.assert_has_calls(
         [
             call(
-                f"{app.CERTIFICATES_FOLDER}/ca-certificates/server.pem",
+                f"{app.fs.certificates_folder()}/ca-certificates/server.pem",
                 "/usr/local/share/ca-certificates",
             ),
             call(
-                f"{app.CERTIFICATES_FOLDER}/ca-certificates/client.pem",
+                f"{app.fs.certificates_folder()}/ca-certificates/client.pem",
                 "/usr/local/share/ca-certificates",
             ),
         ]
