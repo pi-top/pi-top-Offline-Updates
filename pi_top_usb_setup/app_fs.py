@@ -40,6 +40,12 @@ logger = logging.getLogger(__name__)
 class AppFilesystem:
     USB_SETUP_FILENAME_GLOB = "pi-top-usb-setup*.tar.gz"
     TEMP_FOLDER = "/tmp"
+    CERTIFICATES_LOOKUP = {
+        "ca-certificates": {
+            "path": "/usr/local/share/ca-certificates",
+            "command": "update-ca-certificates",
+        }
+    }
 
     def __init__(self, mount_point: str) -> None:
         self.MOUNT_POINT = mount_point
@@ -49,6 +55,7 @@ class AppFilesystem:
         self.FOLDER_TO_COPY = f"{self.SETUP_FOLDER}/files"
         self.SCRIPTS_FOLDER = f"{self.SETUP_FOLDER}/scripts"
         self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates"
+        self.CERTIFICATES_FOLDER = f"{self.SETUP_FOLDER}/certificates"
         if get_linux_distro() == "bookworm":
             self.UPDATES_FOLDER = f"{self.SETUP_FOLDER}/updates_bookworm"
 
@@ -195,6 +202,50 @@ class AppFilesystem:
                     on_progress(float(100.0 * i / len(lookup)))
             except Exception as e:
                 logger.error(f"{e}")
+
+    def install_certificates(self, on_progress: Optional[Callable] = None) -> None:
+        if not Path(self.CERTIFICATES_FOLDER).exists():
+            logger.info("No certificates to install; skipping...")
+            return
+
+        try:
+            print_folder_recursively(self.CERTIFICATES_FOLDER)
+        except Exception as e:
+            logger.error(f"Error listing files in {self.CERTIFICATES_FOLDER}: {e}")
+
+        for index, (key, data) in enumerate(self.CERTIFICATES_LOOKUP.items()):
+            dst = data["path"]
+            progress_factor = int((index / len(self.CERTIFICATES_LOOKUP)))
+
+            folder = f"{self.CERTIFICATES_FOLDER}/{key}"
+            if not path.isdir(folder):
+                continue
+
+            # Create destination directory if it doesn't exist
+            makedirs(dst, exist_ok=True)
+
+            files_copied = 0
+            files = listdir(folder)
+            total_files = len(files)
+
+            # Copy files to destination directory
+            for file in files:
+                path_to_file = f"{folder}/{file}"
+                if not path.isfile(path_to_file):
+                    continue
+                logger.info(f"Copying certificate {file} into {dst} ...")
+                copy2(path_to_file, dst)
+                files_copied += 1
+                if on_progress:
+                    progress = int(
+                        (1 + files_copied / total_files) * progress_factor * 100
+                    )
+                    on_progress(progress)
+
+            command = data.get("command")
+            if files_copied > 0 and command:
+                logger.info(f"Running command '{command}' ...")
+                run_command(command, timeout=60)
 
     def copy_files(self, on_progress: Optional[Callable] = None) -> None:
         if not Path(self.FOLDER_TO_COPY).exists():
