@@ -69,10 +69,10 @@ class RunStates(Enum):
     UPDATING_SYSTEM = 25
     CONFIGURING_DEVICE = 80
     INSTALLING_CERTIFICATES = 82
+    CONFIGURING_NETWORK = 83
     COPYING_FILES = 85
-    COMPLETING_ONBOARDING = 90
-    RUNNING_SCRIPTS = 95
-    CONFIGURING_NETWORK = 98
+    RUNNING_SCRIPTS = 90
+    COMPLETING_ONBOARDING = 95
     DONE = 100
 
 
@@ -100,6 +100,10 @@ class RunSetupPage(Component, HasGutterIcons):
                 "tar_progress": 0,
                 "config_progress": 0,
                 "onboarding_progress": 0,
+                "scripts_progress": 0,
+                "certificate_progress": 0,
+                "network_progress": 0,
+                "copy_progress": 0,
             },
             **kwargs,
         )
@@ -152,14 +156,14 @@ class RunSetupPage(Component, HasGutterIcons):
             # Copy certficates over to the device
             self._install_certificates()
 
+            # Configure network
+            self._set_network()
+
             # Copy files over to the device
             self._copy_files_to_device()
 
             # Run scripts
             self._run_scripts()
-
-            # Configure network
-            self._set_network()
 
             # Finish onboarding if necessary
             self._complete_onboarding()
@@ -417,9 +421,14 @@ class RunSetupPage(Component, HasGutterIcons):
             value += (
                 self.state.get("certificate_progress", 0)
                 / 100
+                * (RunStates.CONFIGURING_NETWORK.value - value)
+            )
+        elif state is RunStates.CONFIGURING_NETWORK:
+            value += (
+                self.state.get("network_progress", 0)
+                / 100
                 * (RunStates.COPYING_FILES.value - value)
             )
-
         elif state is RunStates.COPYING_FILES:
             value += (
                 self.state.get("copy_progress", 0)
@@ -430,15 +439,15 @@ class RunSetupPage(Component, HasGutterIcons):
             value += (
                 self.state.get("scripts_progress", 0)
                 / 100
-                * (RunStates.CONFIGURING_NETWORK.value - value)
-            )
-        elif state is RunStates.CONFIGURING_NETWORK:
-            value += (
-                self.state.get("network_progress", 0)
-                / 100
                 * (RunStates.COMPLETING_ONBOARDING.value - value)
             )
         elif state is RunStates.COMPLETING_ONBOARDING:
+            value += (
+                self.state.get("onboarding_progress", 0)
+                / 100
+                * (RunStates.DONE.value - value)
+            )
+        elif state is RunStates.DONE:
             value += (
                 self.state.get("onboarding_progress", 0)
                 / 100
