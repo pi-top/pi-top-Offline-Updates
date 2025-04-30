@@ -4,6 +4,7 @@ from enum import Enum
 from threading import Thread
 from typing import Callable
 
+from pitop.common.state_manager import StateManager
 from pt_miniscreen.components.mixins import HasGutterIcons
 from pt_miniscreen.components.progress_bar import ProgressBar
 from pt_miniscreen.core.component import Component
@@ -50,6 +51,16 @@ class TextWithDots:
         return f"{self.base} {self.dots}"
 
 
+class ConfigFileKeys(Enum):
+    INSTALL_UPDATE = "install_update"
+    INSTALL_CERTIFICATES = "install_certificates"
+    COPY_FILES = "copy_files"
+    RUN_SCRIPTS = "run_scripts"
+    INSTALL_NETWORK = "install_network"
+    COMPLETE_ONBOARDING = "complete_onboarding"
+    CONFIGURE_DEVICE = "configure_device"
+
+
 # Use enum value to represent 'starting' progress %
 class RunStates(Enum):
     ERROR = -1
@@ -58,9 +69,10 @@ class RunStates(Enum):
     UPDATING_SYSTEM = 25
     CONFIGURING_DEVICE = 80
     INSTALLING_CERTIFICATES = 82
+    CONFIGURING_NETWORK = 83
     COPYING_FILES = 85
-    COMPLETING_ONBOARDING = 90
-    RUNNING_SCRIPTS = 95
+    RUNNING_SCRIPTS = 90
+    COMPLETING_ONBOARDING = 95
     DONE = 100
 
 
@@ -74,6 +86,7 @@ class AppErrors(Enum):
     COPY_ERROR = 6
     SCRIPTS_ERROR = 7
     CERTIFICATE_INSTALLATION_ERROR = 8
+    NETWORK_CONFIGURATION_ERROR = 9
 
 
 class RunSetupPage(Component, HasGutterIcons):
@@ -87,9 +100,19 @@ class RunSetupPage(Component, HasGutterIcons):
                 "tar_progress": 0,
                 "config_progress": 0,
                 "onboarding_progress": 0,
+                "scripts_progress": 0,
+                "certificate_progress": 0,
+                "network_progress": 0,
+                "copy_progress": 0,
             },
             **kwargs,
         )
+
+        self.state_manager = None
+        try:
+            self.state_manager = StateManager("pi-top-usb-setup")
+        except Exception as e:
+            logger.error(f"Couldn't create state manager: {e}")
 
         try:
             self.fs = AppFilesystem(mount_point=os.environ["PT_USB_SETUP_MOUNT_POINT"])
@@ -118,6 +141,9 @@ class RunSetupPage(Component, HasGutterIcons):
             # Extract compressed file
             self._extract_file()
 
+            # Read JSON file
+            self.fs.read_config_file()
+
             # Umount USB drive
             self.fs.umount_usb_drive()
 
@@ -129,6 +155,9 @@ class RunSetupPage(Component, HasGutterIcons):
 
             # Copy certficates over to the device
             self._install_certificates()
+
+            # Configure network
+            self._set_network()
 
             # Copy files over to the device
             self._copy_files_to_device()
@@ -179,9 +208,22 @@ class RunSetupPage(Component, HasGutterIcons):
             )
             raise
 
+    def _should_run(self, stage: ConfigFileKeys) -> bool:
+        should_run = False
+        try:
+            should_run = isinstance(
+                self.state_manager, StateManager
+            ) and self.state_manager.get("app", stage.value, "false") in (
+                "true",
+                "1",
+            )
+        except Exception as e:
+            logger.error(f"Error getting state manager: {e}")
+        return should_run
+
     def _update_system(self):
-        if os.environ.get("PT_USB_SETUP_SKIP_UPDATE", "0") == "1":
-            logger.info("Skipping system update; script called with --skip-update")
+        if not self._should_run(ConfigFileKeys.INSTALL_UPDATE):
+            logger.warning("Skipping system update due to system configuration...")
             return
 
         try:
@@ -233,6 +275,12 @@ class RunSetupPage(Component, HasGutterIcons):
             raise Exception(f"Update Error: {e}")
 
     def _configure_device(self):
+        if not self._should_run(ConfigFileKeys.CONFIGURE_DEVICE):
+            logger.warning(
+                "Skipping device configuration due to system configuration..."
+            )
+            return
+
         self.state.update({"run_state": RunStates.CONFIGURING_DEVICE})
         try:
             self.fs.configure_device(
@@ -246,7 +294,35 @@ class RunSetupPage(Component, HasGutterIcons):
             )
             raise Exception(f"Config Error: {e}")
 
+    def _set_network(self):
+        if not self._should_run(ConfigFileKeys.INSTALL_NETWORK):
+            logger.warning(
+                "Skipping network configuration due to system configuration..."
+            )
+            return
+
+        self.state.update({"run_state": RunStates.CONFIGURING_NETWORK})
+        try:
+            self.fs.set_network(
+                on_progress=lambda percentage: self.state.update(
+                    {"network_progress": percentage}
+                ),
+            )
+        except Exception:
+            self.state.update(
+                {
+                    "run_state": RunStates.ERROR,
+                    "error": AppErrors.NETWORK_CONFIGURATION_ERROR,
+                }
+            )
+
     def _install_certificates(self):
+        if not self._should_run(ConfigFileKeys.INSTALL_CERTIFICATES):
+            logger.warning(
+                "Skipping certificate installation due to system configuration..."
+            )
+            return
+
         self.state.update({"run_state": RunStates.INSTALLING_CERTIFICATES})
         try:
             self.fs.install_certificates(
@@ -264,6 +340,10 @@ class RunSetupPage(Component, HasGutterIcons):
             raise Exception(f"Certificate Installation Error: {e}")
 
     def _copy_files_to_device(self):
+        if not self._should_run(ConfigFileKeys.COPY_FILES):
+            logger.warning("Skipping files copy due to system configuration...")
+            return
+
         self.state.update({"run_state": RunStates.COPYING_FILES})
         try:
             self.fs.copy_files(
@@ -278,6 +358,10 @@ class RunSetupPage(Component, HasGutterIcons):
             raise Exception(f"Copy Error: {e}")
 
     def _complete_onboarding(self):
+        if not self._should_run(ConfigFileKeys.COMPLETE_ONBOARDING):
+            logger.warning("Skipping onboarding due to system configuration...")
+            return
+
         self.state.update({"run_state": RunStates.COMPLETING_ONBOARDING})
         try:
             self.fs.complete_onboarding(
@@ -292,6 +376,10 @@ class RunSetupPage(Component, HasGutterIcons):
             raise Exception(f"Onboarding Error: {e}")
 
     def _run_scripts(self):
+        if not self._should_run(ConfigFileKeys.RUN_SCRIPTS):
+            logger.warning("Skipping scripts run due to system configuration...")
+            return
+
         self.state.update({"run_state": RunStates.RUNNING_SCRIPTS})
         try:
             self.fs.run_scripts(
@@ -333,9 +421,14 @@ class RunSetupPage(Component, HasGutterIcons):
             value += (
                 self.state.get("certificate_progress", 0)
                 / 100
+                * (RunStates.CONFIGURING_NETWORK.value - value)
+            )
+        elif state is RunStates.CONFIGURING_NETWORK:
+            value += (
+                self.state.get("network_progress", 0)
+                / 100
                 * (RunStates.COPYING_FILES.value - value)
             )
-
         elif state is RunStates.COPYING_FILES:
             value += (
                 self.state.get("copy_progress", 0)
@@ -349,6 +442,12 @@ class RunSetupPage(Component, HasGutterIcons):
                 * (RunStates.COMPLETING_ONBOARDING.value - value)
             )
         elif state is RunStates.COMPLETING_ONBOARDING:
+            value += (
+                self.state.get("onboarding_progress", 0)
+                / 100
+                * (RunStates.DONE.value - value)
+            )
+        elif state is RunStates.DONE:
             value += (
                 self.state.get("onboarding_progress", 0)
                 / 100

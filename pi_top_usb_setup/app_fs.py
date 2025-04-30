@@ -3,7 +3,7 @@ import logging
 from os import listdir, makedirs, path, walk
 from pathlib import Path
 from shutil import copy2, rmtree
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
 from pitop.common.command_runner import run_command
 from pt_os_web_portal.backend.helpers.finalise import (
@@ -71,6 +71,8 @@ class AppFilesystem:
 
         self.requires_reboot = False
         self.device = self._get_device(mount_point)
+
+        self.config: Dict = {}
 
     def _get_device(self, mount_point: str):
         device = None
@@ -143,27 +145,23 @@ class AppFilesystem:
         except Exception as e:
             raise ExtractionError(f"Error extracting '{filename}': {e}")
 
+    def read_config_file(self) -> None:
+        config_file_path = self.DEVICE_CONFIG
+        if not Path(config_file_path).exists():
+            logger.info(
+                f"No device configuration file '{config_file_path}' found; skipping...."
+            )
+            return
+
+        with open(str(config_file_path)) as file:
+            content = file.read()
+            config = json.loads(content)
+
+        self.config = config
+
     def configure_device(self, on_progress: Optional[Callable] = None) -> None:
         if not Path(self.DEVICE_CONFIG).exists():
             logger.info("No device configuration file found; skipping....")
-            return
-
-        def set_network(network_data):
-            # FORMAT:
-            # {
-            #     "ssid": str,
-            #     "hidden": bool
-            #     "authentication": {
-            #         "type": str,
-            #         "password": str,
-            #         ...
-            #     },
-            # }
-            logger.info(f"Setting network with data: {network_data}")
-            try:
-                Network.from_dict(network_data).connect()
-            except Exception as e:
-                logger.error(f"Error setting network: {e}")
             return
 
         # setting the keyboard layout requires a layout and a variant
@@ -175,20 +173,15 @@ class AppFilesystem:
                 *layout_and_variant_arr
             ),
             "email": set_registration_email,
-            "network": set_network,
         }
 
         logger.info(f"Configuring device using {self.DEVICE_CONFIG}")
-        with open(self.DEVICE_CONFIG) as file:
-            content = file.read()
-            config = json.loads(content)
-
         for i, (key, function) in enumerate(lookup.items()):
-            if key not in config:
+            if key not in self.config:
                 logger.info(f"'{key}' not found in configuration file, skipping...")
                 continue
 
-            args = config.get(key)
+            args = self.config.get(key)
             if args is None:
                 logger.info(
                     f"Value for '{key}' not found in configuration file, skipping..."
@@ -197,11 +190,33 @@ class AppFilesystem:
 
             try:
                 logger.info(f"{key}: Executing {function} with '{args}'")
-                function(config.get(key))
+                function(args)
                 if callable(on_progress):
                     on_progress(float(100.0 * i / len(lookup)))
             except Exception as e:
                 logger.error(f"{e}")
+
+    def set_network(self, on_progress: Optional[Callable] = None) -> None:
+        if not Path(self.DEVICE_CONFIG).exists():
+            logger.info("No device configuration file found; skipping....")
+            return
+
+        logger.info(f"Setting network using {self.DEVICE_CONFIG}")
+
+        network_data = self.config.get("network")
+        if network_data is None:
+            logger.info("No network data found in configuration file, skipping...")
+            return
+
+        logger.info(f"Setting network with data: {network_data}")
+
+        try:
+            Network.from_dict(network_data).connect()
+        except Exception as e:
+            logger.error(f"Error setting network: {e}")
+
+        if callable(on_progress):
+            on_progress(100.0)
 
     def install_certificates(self, on_progress: Optional[Callable] = None) -> None:
         if not Path(self.CERTIFICATES_FOLDER).exists():
