@@ -6,7 +6,7 @@ import click
 import click_logging
 
 from pi_top_usb_setup.app import UsbSetupApp
-from pi_top_usb_setup.usb_file_structure import UsbSetupStructure
+from pi_top_usb_setup.file_structure import MountPointStructure, UsbSetupStructure
 
 logger = logging.getLogger()
 click_logging.basic_config(logger)
@@ -22,7 +22,11 @@ def main(
     skip_dialog,
 ) -> None:
 
-    if not UsbSetupStructure.is_valid_mount_point(mount_point):
+    # check wether we received a mount point where we need to extract the setup file
+    # or a path where the USB setup file is already extracted
+    if not UsbSetupStructure.is_valid_directory(
+        mount_point
+    ) and not MountPointStructure.is_valid_mount_point(mount_point):
         raise Exception(f"Couldn't find a valid USB update bundle in {mount_point}")
 
     if skip_dialog:

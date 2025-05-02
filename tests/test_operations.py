@@ -10,13 +10,13 @@ import pytest
 @pytest.fixture
 def mock_copy2():
     # mock pi_top_usb_setup.operations.copy2
-    with patch("pi_top_usb_setup.operations.copy2") as copy_mock:
+    with patch("pi_top_usb_setup.operations.core.copy2") as copy_mock:
         yield copy_mock
 
 
 @pytest.fixture
 def mock_makedirs():
-    with patch("pi_top_usb_setup.operations.makedirs") as makedirs_mock:
+    with patch("pi_top_usb_setup.operations.core.makedirs") as makedirs_mock:
         yield makedirs_mock
 
 
@@ -66,16 +66,14 @@ def operations(create_mount_point):
     created_dirs = []
 
     def _create_operations_obj(files: Optional[dict] = None):
-
         temp_dir = create_mount_point(files)
         created_dirs.append(temp_dir)
 
-        from pi_top_usb_setup.operations import Operations
-        from pi_top_usb_setup.usb_file_structure import UsbSetupStructure
+        from pi_top_usb_setup.file_structure import UsbSetupStructure
+        from pi_top_usb_setup.operations import CoreOperations
 
         usb_setup_structure = UsbSetupStructure(temp_dir)
-        usb_setup_structure.temp_folder_path = pathlib.Path(temp_dir)
-        return Operations(usb_setup_structure)
+        return CoreOperations(usb_setup_structure)
 
     yield _create_operations_obj
 

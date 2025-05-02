@@ -1,6 +1,8 @@
 import logging
 import os
 from enum import Enum
+from pathlib import Path
+from tempfile import mkdtemp
 from threading import Thread
 from typing import Callable
 
@@ -16,14 +18,13 @@ from pi_top_usb_setup.exceptions import (
     NotAnAptRepository,
     NotEnoughSpaceException,
 )
-from pi_top_usb_setup.operations import Operations
+from pi_top_usb_setup.file_structure import MountPointStructure, UsbSetupStructure
+from pi_top_usb_setup.operations import CoreOperations, MountPointOperations
 from pi_top_usb_setup.system_updater import SystemUpdater
-from pi_top_usb_setup.usb_file_structure import UsbSetupStructure
 from pi_top_usb_setup.utils import (
     RestartingSystemdService,
     get_package_version,
     restart_service_and_skip_user_confirmation_dialog,
-    umount_usb_drive,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,8 +118,18 @@ class RunSetupPage(Component, HasGutterIcons):
             logger.error(f"Couldn't create state manager: {e}")
 
         try:
-            self.fs = UsbSetupStructure(os.environ["PT_USB_SETUP_MOUNT_POINT"])
-            self.operations = Operations(self.fs)
+            folder = os.environ["PT_USB_SETUP_MOUNT_POINT"]
+
+            self.mount_point = MountPointStructure(folder)
+
+            # If the files are not extracted yet, we'll create a temporary directory
+            # and extract the setup file there later...
+            if not UsbSetupStructure.is_valid_directory(folder):
+                folder = mkdtemp()
+            self.extracted_fs = UsbSetupStructure(folder)
+
+            self.core_operations = CoreOperations(self.extracted_fs)
+            self.mount_point_operations = MountPointOperations(self.mount_point)
         except Exception as e:
             logger.error(f"{e}")
             raise e
@@ -141,14 +152,11 @@ class RunSetupPage(Component, HasGutterIcons):
 
     def run_setup(self):
         try:
-            # Extract compressed file
+            # Extract compressed file if necessary
             self._extract_file()
 
             # Read the JSON file
-            self.operations.read_config_file()
-
-            # Umount USB drive
-            umount_usb_drive(os.environ["PT_USB_SETUP_MOUNT_POINT"])
+            self.core_operations.read_config_file()
 
             # Update packages
             self._update_system()
@@ -172,6 +180,8 @@ class RunSetupPage(Component, HasGutterIcons):
             self._complete_onboarding()
 
             self.state.update({"run_state": RunStates.DONE})
+
+            self.core_operations.cleanup()
         except RestartingSystemdService:
             logger.warning("Restarting systemd service, exiting ...")
             return
@@ -180,7 +190,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         if callable(self.on_complete):
             message = "Device setup is complete! Press any button to exit."
-            if self.operations.requires_reboot:
+            if self.core_operations.requires_reboot:
                 message = (
                     "Device setup is complete! Press any button to reboot the device!"
                 )
@@ -189,17 +199,23 @@ class RunSetupPage(Component, HasGutterIcons):
                 if self.state.get("error") == AppErrors.NOT_ENOUGH_SPACE:
                     message = "There's not enough free space in your pi-top to continue. Press any button to exit"
             self.on_complete(
-                {"message": message, "requires_reboot": self.operations.requires_reboot}
+                {
+                    "message": message,
+                    "requires_reboot": self.core_operations.requires_reboot,
+                }
             )
 
     def _extract_file(self):
         self.state.update({"run_state": RunStates.EXTRACTING_TAR})
         try:
-            self.operations.extract_setup_file(
+            self.mount_point_operations.extract_setup_file(
+                destination=Path(self.extracted_fs.directory),
                 on_progress=lambda percentage: self.state.update(
                     {"tar_progress": percentage}
-                )
+                ),
             )
+            # Umount USB drive
+            self.mount_point_operations.umount_usb_drive()
         except NotEnoughSpaceException:
             self.state.update(
                 {"run_state": RunStates.ERROR, "error": AppErrors.NOT_ENOUGH_SPACE}
@@ -231,7 +247,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         try:
             updater = SystemUpdater(
-                apt_repository=str(self.fs.updates_folder()),
+                apt_repository=str(self.extracted_fs.updates_folder()),
                 on_progress=lambda percentage: self.state.update(
                     {"apt_progress": percentage}
                 ),
@@ -259,7 +275,7 @@ class RunSetupPage(Component, HasGutterIcons):
                     f"Package 'pi-top-usb-setup' was updated from '{version_before_update}' to '{version_after_update}', restarting app..."
                 )
                 restart_service_and_skip_user_confirmation_dialog(
-                    mount_point=str(self.fs.folder())
+                    mount_point=str(self.extracted_fs.folder())
                 )
                 raise RestartingSystemdService
 
@@ -286,7 +302,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.CONFIGURING_DEVICE})
         try:
-            self.operations.configure_device(
+            self.core_operations.configure_device(
                 on_progress=lambda percentage: self.state.update(
                     {"config_progress": percentage}
                 ),
@@ -306,7 +322,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.CONFIGURING_NETWORK})
         try:
-            self.fs.set_network(
+            self.extracted_fs.set_network(
                 on_progress=lambda percentage: self.state.update(
                     {"network_progress": percentage}
                 ),
@@ -328,7 +344,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.INSTALLING_CERTIFICATES})
         try:
-            self.operations.install_certificates(
+            self.core_operations.install_certificates(
                 on_progress=lambda percentage: self.state.update(
                     {"certificate_progress": percentage}
                 ),
@@ -349,7 +365,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.COPYING_FILES})
         try:
-            self.operations.copy_files(
+            self.core_operations.copy_files(
                 on_progress=lambda percentage: self.state.update(
                     {"copy_progress": percentage}
                 ),
@@ -367,7 +383,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.COMPLETING_ONBOARDING})
         try:
-            self.operations.complete_onboarding(
+            self.core_operations.complete_onboarding(
                 on_progress=lambda percentage: self.state.update(
                     {"onboarding_progress": percentage}
                 ),
@@ -385,7 +401,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.RUNNING_SCRIPTS})
         try:
-            self.operations.run_scripts(
+            self.core_operations.run_scripts(
                 on_progress=lambda percentage: self.state.update(
                     {"scripts_progress": percentage}
                 ),
@@ -464,7 +480,7 @@ class RunSetupPage(Component, HasGutterIcons):
         # If the USB device is still connected ...
         if (
             run_state == RunStates.UPDATING_SYSTEM
-            and self.operations.usb_drive_is_present
+            and self.mount_point_operations.usb_drive_is_present
         ):
             return "You can remove the USB drive; setup process will continue"
 

@@ -1,7 +1,6 @@
 import json
 import logging
 from os import listdir, makedirs, path, walk
-from pathlib import Path
 from shutil import copy2, rmtree
 from typing import Callable, Dict, Optional
 
@@ -23,94 +22,19 @@ from pt_os_web_portal.backend.helpers.registration import set_registration_email
 from pt_os_web_portal.backend.helpers.timezone import set_timezone
 from pt_os_web_portal.backend.helpers.wifi_country import set_wifi_country
 
-from pi_top_usb_setup.exceptions import ExtractionError, NotEnoughSpaceException
+from pi_top_usb_setup.file_structure import UsbSetupStructure
 from pi_top_usb_setup.network import Network
-from pi_top_usb_setup.utils import (
-    drive_has_enough_free_space,
-    extract_file,
-    get_tar_gz_extracted_size,
-    print_folder_recursively,
-)
-
-from .usb_file_structure import UsbSetupStructure
+from pi_top_usb_setup.utils import print_folder_recursively
 
 logger = logging.getLogger(__name__)
 
 
-class Operations:
+class CoreOperations:
     def __init__(self, fs: UsbSetupStructure) -> None:
         self.fs = fs
 
         self.requires_reboot = False
-        self.device = self._get_device(str(self.fs.mount_point))
         self.config: Dict = {}
-
-    def _get_device(self, mount_point: str) -> str:
-        device = ""
-        if mount_point:
-            device = run_command(
-                f"findmnt -n -o SOURCE --target {mount_point}", timeout=5
-            ).strip()
-        return device
-
-    @property
-    def usb_drive_is_present(self) -> bool:
-        return Path(self.device).exists()
-
-    def extract_setup_file(self, on_progress: Optional[Callable] = None) -> None:
-        """Extracts the newest compressed setup bundle found in the mount point"""
-        files = self.fs.find_setup_files()
-        if len(files) >= 1:
-            logger.info(f"Found {len(files)} setup files; will use '{files[0]}'...")
-            self._do_extract_setup_file(files[0], on_progress)
-        else:
-            logger.warning(
-                f"No compressed setup file found in '{self.fs.mount_point}'; skipping extraction"
-            )
-
-    def _do_extract_setup_file(
-        self, filename: Path, on_progress: Optional[Callable] = None
-    ) -> None:
-        """Extracts the given filename into a temporary folder"""
-        if not filename.exists():
-            logger.warning(f"File '{filename}' doesn't exist; skipping extraction")
-            return
-
-        setup_folder_path = self.fs.folder()
-        if setup_folder_path.exists():
-            logger.warning(
-                f"Setup folder '{setup_folder_path}' already exists in the system, removing it ..."
-            )
-            try:
-                rmtree(setup_folder_path)
-            except Exception as e:
-                raise ExtractionError(
-                    f"Error removing existing setup folder '{setup_folder_path}': {e}"
-                )
-
-        # Get extracted size of the tar.gz file
-        try:
-            space = get_tar_gz_extracted_size(str(filename))
-        except Exception as e:
-            raise ExtractionError(f"Error getting extracted size of '{filename}', {e}")
-
-        # Check if there's enough free space in the SD card
-        drive = "/"
-        if not drive_has_enough_free_space(drive=drive, space=space):
-            raise NotEnoughSpaceException(
-                f"Not enough space to extract '{filename}' into {drive}"
-            )
-
-        temp_folder_path = self.fs.temp_folder()
-        try:
-            extract_file(
-                file=str(filename),
-                destination=str(temp_folder_path),
-                on_progress=on_progress,
-            )
-            logger.info(f"File {filename} extracted into {temp_folder_path}")
-        except Exception as e:
-            raise ExtractionError(f"Error extracting '{filename}': {e}")
 
     def read_config_file(self) -> None:
         """Reads the configuration JSON file from the setup bundle into a dictionary"""
@@ -318,3 +242,11 @@ class Operations:
                 on_progress(float(100.0 * i / len(functions)))
 
         self.requires_reboot = True
+
+    def cleanup(self) -> None:
+        """Cleans up the device after the setup is complete"""
+        try:
+            logger.info(f"Cleaning up {self.fs.directory} ...")
+            rmtree(self.fs.directory)
+        except Exception as e:
+            logger.error(f"Error cleaning up {self.fs.directory}: {e}")
