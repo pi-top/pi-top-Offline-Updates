@@ -38,6 +38,7 @@ class CoreOperations:
 
     def read_config_file(self) -> None:
         """Reads the configuration JSON file from the setup bundle into a dictionary"""
+        logger.info(f"Reading configuration file from {self.fs.json_file()} ...")
         config_file_path = self.fs.json_file()
         if not config_file_path.exists():
             logger.info(
@@ -53,6 +54,7 @@ class CoreOperations:
 
     def configure_device(self, on_progress: Optional[Callable] = None) -> None:
         """Configures the device based on the configuration file"""
+        logger.info("Configuring device...")
 
         # setting the keyboard layout requires a layout and a variant
         lookup = {
@@ -86,12 +88,15 @@ class CoreOperations:
                 logger.error(f"{e}")
 
     def set_network(self, on_progress: Optional[Callable] = None) -> None:
+        """Sets the network based on the configuration file"""
+        logger.info("Setting network...")
+
         network_data = self.config.get("network")
         if network_data is None:
             logger.info("No network data found in configuration file, skipping...")
             return
 
-        logger.info(f"Setting network with data: {network_data}")
+        logger.info(f"Network data: {network_data}")
 
         try:
             Network.from_dict(network_data).connect()
@@ -103,6 +108,8 @@ class CoreOperations:
 
     def install_certificates(self, on_progress: Optional[Callable] = None) -> None:
         """Installs the certificates from the setup bundle into the device"""
+        logger.info("Installing certificates...")
+
         certificates_folder_path = self.fs.certificates_folder()
         if not certificates_folder_path.exists():
             logger.info("No certificates to install; skipping...")
@@ -149,6 +156,8 @@ class CoreOperations:
 
     def copy_files(self, on_progress: Optional[Callable] = None) -> None:
         """Copies the files from the files directory of the setup bundle into the device"""
+        logger.info("Copying files...")
+
         files_folder_path = self.fs.files_folder()
         if not files_folder_path.exists():
             logger.info("No files to copy; skipping...")
@@ -187,6 +196,7 @@ class CoreOperations:
 
     def run_scripts(self, on_progress: Optional[Callable] = None) -> None:
         """Runs the scripts from the scripts directory of the setup bundle"""
+        logger.info("Running scripts...")
         scripts_folder_path = self.fs.scripts_folder()
         if not scripts_folder_path.exists():
             logger.info("No scripts to run; skipping...")
@@ -215,8 +225,9 @@ class CoreOperations:
 
     def complete_onboarding(self, on_progress: Optional[Callable] = None) -> None:
         """Completes the onboarding process for the device"""
+        logger.info("Completing onboarding for device ...")
         if onboarding_completed():
-            logger.info("Device already onboarded")
+            logger.info("Device already onboarded; skipping ...")
             return
 
         functions = (
@@ -230,7 +241,6 @@ class CoreOperations:
             disable_ap_mode,
         )
 
-        logger.info("Completing onboarding for device ...")
         for i, func in enumerate(functions):
             try:
                 logger.info(f"Executing {func} ...")
