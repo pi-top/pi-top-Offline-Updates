@@ -22,7 +22,7 @@ def main(
     skip_dialog,
 ) -> None:
 
-    # check wether we received a mount point where we need to extract the setup file
+    # check whether we received a mount point where we need to extract the setup file
     # or a path where the USB setup file is already extracted
     if not UsbSetupStructure.is_valid_directory(
         mount_point
