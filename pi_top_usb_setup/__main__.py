@@ -10,6 +10,7 @@ from pi_top_usb_setup.file_structure import MountPointStructure, UsbSetupStructu
 
 logger = logging.getLogger()
 click_logging.basic_config(logger)
+logger.setLevel(logging.INFO)
 
 
 @click.command()

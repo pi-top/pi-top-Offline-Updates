@@ -322,7 +322,7 @@ class RunSetupPage(Component, HasGutterIcons):
 
         self.state.update({"run_state": RunStates.CONFIGURING_NETWORK})
         try:
-            self.extracted_fs.set_network(
+            self.core_operations.set_network(
                 on_progress=lambda percentage: self.state.update(
                     {"network_progress": percentage}
                 ),
