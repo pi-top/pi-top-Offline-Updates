@@ -5,6 +5,25 @@ case "$1" in
     # Reload udev
     udevadm control --reload-rules
     udevadm trigger
+
+    # Create state file if it doesn't exist
+    STATE_FILE="/var/lib/pi-top-usb-setup/state.cfg"
+    if [ ! -f "$STATE_FILE" ]; then
+      echo "Creating state file in $STATE_FILE with default values"
+      mkdir -p "$(dirname "$STATE_FILE")"
+      cat >"${STATE_FILE}" <<EOL
+[app]
+install_update = true
+install_certificates = true
+copy_files = true
+run_scripts = true
+install_network = true
+complete_onboarding = true
+configure_device = true
+EOL
+    else
+      echo "State file already exists, not overwriting..."
+    fi
   ;;
 
 \

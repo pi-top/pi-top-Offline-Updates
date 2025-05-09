@@ -17,7 +17,7 @@ The setup script updates the system using a local apt repository with the files 
 and the uses a JSON file to set the locales, language, keyboard layout and wi-fi network.
 
 Each step of the setup process is optional and can be disabled by setting the corresponding
-key to `false` in the JSON file located in `/var/lib/pi-top-usb-setup/state.cfg`.
+key to `false` in the file located in `/var/lib/pi-top-usb-setup/state.cfg`.
 
 -------------------------------------------
 File structure for pi-top-usb-setup.tar.gz
