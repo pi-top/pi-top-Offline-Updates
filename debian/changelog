@@ -1,4 +1,4 @@
-pi-top-usb-setup-src (0.2.0-5) bullseye; urgency=medium
+pi-top-usb-setup-src (0.3.0-1) bullseye; urgency=medium
 
   * Support certificate installation (#29)
   * Use state file to run/skip setup stages (#30)
