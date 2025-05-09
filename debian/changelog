@@ -1,3 +1,12 @@
+pi-top-usb-setup-src (0.2.0-5) bullseye; urgency=medium
+
+  * Support certificate installation (#29)
+  * Use state file to run/skip setup stages (#30)
+  * Move file structure knowledge into a separate class (#31)
+  * Start app with device or mount point (#32)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Fri, 09 May 2025 19:12:41 +0000
+
 pi-top-usb-setup-src (0.2.0-4) bullseye; urgency=medium
 
   * Updated master workflow files
