@@ -48,6 +48,10 @@ class MountPointStructure:
             f"findmnt -n -o SOURCE --target {self.mount_point}", timeout=5
         ).strip()
 
+    def is_usb_drive(self) -> bool:
+        device = self.device()
+        return Path(device).exists() and device.startswith("/dev/sd")
+
 
 @dataclass
 class UsbSetupStructure:

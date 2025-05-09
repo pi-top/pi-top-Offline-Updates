@@ -125,6 +125,9 @@ class RunSetupPage(Component, HasGutterIcons):
             # If the files are not extracted yet, we'll create a temporary directory
             # and extract the setup file there later...
             if not UsbSetupStructure.is_valid_directory(folder):
+                logger.info(
+                    f"There's no JSON file in '{folder}'; creating a temporary directory for extracting the setup bundle..."
+                )
                 folder = mkdtemp()
             self.extracted_fs = UsbSetupStructure(folder)
 
@@ -180,8 +183,6 @@ class RunSetupPage(Component, HasGutterIcons):
             self._complete_onboarding()
 
             self.state.update({"run_state": RunStates.DONE})
-
-            self.core_operations.cleanup()
         except RestartingSystemdService:
             logger.warning("Restarting systemd service, exiting ...")
             return

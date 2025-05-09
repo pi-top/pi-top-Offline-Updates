@@ -75,9 +75,9 @@ start_miniscreen_app() {
       return
     fi
 
-    ESCAPED_MOUNT_POINT_ARG=$(systemd-escape -- $MOUNT_POINT)
-    log "Starting miniscreen application: pt-usb-setup@$ESCAPED_MOUNT_POINT_ARG.service"
-    systemctl start pt-usb-setup@"$ESCAPED_MOUNT_POINT_ARG".service
+    ESCAPED_DEVICE_ARG=$(systemd-escape -- $DEVICE)
+    log "Starting miniscreen application: pt-usb-setup@$ESCAPED_DEVICE_ARG.service"
+    systemctl start pt-usb-setup@"$ESCAPED_DEVICE_ARG".service
 }
 
 has_pitop_offline_setup_files() {

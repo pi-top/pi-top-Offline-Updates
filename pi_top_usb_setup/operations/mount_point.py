@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from shutil import rmtree
 from typing import Callable, Optional
 
 from pi_top_usb_setup.exceptions import ExtractionError, NotEnoughSpaceException
@@ -40,17 +39,6 @@ class MountPointOperations:
             logger.warning(f"File '{filename}' doesn't exist; skipping extraction")
             return
 
-        if destination.exists():
-            logger.warning(
-                f"Setup folder '{destination}' already exists in the system, removing it ..."
-            )
-            try:
-                rmtree(destination)
-            except Exception as e:
-                raise ExtractionError(
-                    f"Error removing existing setup folder '{destination}': {e}"
-                )
-
         # Get extracted size of the tar.gz file
         try:
             space = get_tar_gz_extracted_size(str(filename))
@@ -83,4 +71,4 @@ class MountPointOperations:
 
     @property
     def usb_drive_is_present(self) -> bool:
-        return Path(self.structure.device()).exists()
+        return self.structure.is_usb_drive()
