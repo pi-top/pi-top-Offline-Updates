@@ -2,9 +2,11 @@
 
 case "$1" in
   configure)
-    # Reload udev
-    udevadm control --reload-rules
-    udevadm trigger
+    # Reload udev if not running in container such as systemd-nspawn
+    if [ -z "$container" ]; then
+      udevadm control --reload-rules
+      udevadm trigger
+    fi
 
     # Create state file if it doesn't exist
     STATE_FILE="/var/lib/pi-top-usb-setup/state.cfg"
