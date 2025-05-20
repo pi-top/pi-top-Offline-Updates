@@ -413,17 +413,14 @@ def test_install_certificates_when_valid_folder_is_found(
         ]
     )
     # Files are copied to the correct folder
-    mock_copy2.assert_has_calls(
-        [
-            call(
-                f"{app.fs.certificates_folder()}/ca-certificates/server.pem",
-                "/usr/local/share/ca-certificates",
-            ),
-            call(
-                f"{app.fs.certificates_folder()}/ca-certificates/client.pem",
-                "/usr/local/share/ca-certificates",
-            ),
-        ]
+    assert mock_copy2.call_count == 2
+    mock_copy2.assert_any_call(
+        f"{app.fs.certificates_folder()}/ca-certificates/server.pem",
+        "/usr/local/share/ca-certificates",
+    )
+    mock_copy2.assert_any_call(
+        f"{app.fs.certificates_folder()}/ca-certificates/client.pem",
+        "/usr/local/share/ca-certificates",
     )
     # The associated command is run
     mock_run_command.assert_called_once_with("update-ca-certificates", timeout=60)
