@@ -56,16 +56,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Report to slack (testing)
-        uses: slackapi/slack-github-action@v1.25.0
-        with:
-          payload: |
-            {
-              "text": "pi-top-Offline-Updates: testing ..."
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_OS_PR_UPDATES }}
-
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
