@@ -140,8 +140,8 @@ def test_deletes_connection_if_exists(mocker):
     n.connect()
 
     run_command_mock.assert_any_call(
-        f'nmcli connection down "PT-USB-SETUP-{data["ssid"]}"', timeout=30, check=True
+        f"nmcli connection down 'PT-USB-SETUP-{data['ssid']}'", timeout=30, check=True
     )
     run_command_mock.assert_any_call(
-        f'nmcli connection delete "PT-USB-SETUP-{data["ssid"]}"', timeout=30, check=True
+        f"nmcli connection delete 'PT-USB-SETUP-{data['ssid']}'", timeout=30, check=True
     )
