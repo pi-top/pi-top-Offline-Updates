@@ -56,6 +56,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Report to slack (testing)
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "pi-top-Offline-Updates: testing ..."
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_OS_PR_UPDATES }}
+
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -139,10 +149,13 @@ jobs:
         if: github.ref == 'refs/heads/master' && always()
         uses: slackapi/slack-github-action@v1.25.0
         with:
-          channel-id: 'C02UEAAHK3R'
-          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for ${{ matrix.DISTRO }}.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          payload: |
+            {
+              "text": "pi-top-Offline-Updates: create-usb-setup-file workflow run for ${{ matrix.DISTRO }}.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_OS_PR_UPDATES }}
+
 
   create-combined-bundle-file:
     runs-on: ubuntu-24.04
@@ -189,7 +202,9 @@ jobs:
         if: github.ref == 'refs/heads/master' && always()
         uses: slackapi/slack-github-action@v1.25.0
         with:
-          channel-id: 'C02UEAAHK3R'
-          slack-message: "pi-top-Offline-Updates: create-usb-setup-file workflow run for combined bundle.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          payload: |
+            {
+              "text": "pi-top-Offline-Updates: create-usb-setup-file workflow run for combined bundle.\nStatus: ${{ job.status }}\nUrl: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_PACKAGE_PROMOTER_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_OS_PR_UPDATES }}
