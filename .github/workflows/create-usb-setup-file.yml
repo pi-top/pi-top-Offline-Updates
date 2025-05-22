@@ -28,7 +28,7 @@ jobs:
             PACKAGES_FOLDER_NAME: "updates"
             COMPRESSED_UPDATES_FILENAME: "updates.tar.gz"
           - DISTRO: "bookworm"
-            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bookworm/pi-topOS_bookworm_release_armhf_2024-08-06_B62.zip"
+            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bookworm/pi-topOS_bookworm_release_armhf_2025-02-04_B73.zip"
             PACKAGES_FOLDER_NAME: "updates_bookworm"
             COMPRESSED_UPDATES_FILENAME: "updates_bookworm.tar.gz"
 
