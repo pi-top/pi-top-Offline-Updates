@@ -1,3 +1,9 @@
+pi-top-usb-setup-src (0.3.1-2) bullseye; urgency=medium
+
+  * Use typing.Union for compatibility with python 3.9 (#38)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Tue, 03 Jun 2025 14:16:59 +0000
+
 pi-top-usb-setup-src (0.3.1-1) bullseye; urgency=medium
 
   * Use Slack webhook for reporting workflow status (#36)
