@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pitop.common.command_runner import run_command
 
@@ -432,7 +432,7 @@ class WpaEnterprise(NetworkBase):
 @dataclass
 class Network:
     ssid: str
-    authentication: WpaPersonal | LEAP | OWE | WpaEnterprise
+    authentication: Union[WpaPersonal, LEAP, OWE, WpaEnterprise]
     hidden: bool = False
 
     @property
@@ -507,7 +507,7 @@ class Network:
     @staticmethod
     def get_authentication(
         auth_dict: dict,
-    ) -> WpaPersonal | LEAP | OWE | WpaEnterprise:
+    ) -> Union[WpaPersonal, LEAP, OWE, WpaEnterprise]:
         lookup = {
             WiFiSecurityEnum.LEAP: LEAP,
             WiFiSecurityEnum.OPEN: Open,
