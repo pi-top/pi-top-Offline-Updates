@@ -100,6 +100,7 @@ jobs:
             # Update system and download packages
             apt update
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
+            DEBIAN_FRONTEND=noninteractive apt autoremove -y
             cd /packages
             ls -lh
             bash ./download-packages.sh "${{ matrix.PACKAGES_FOLDER_NAME }}" "${{ matrix.COMPRESSED_UPDATES_FILENAME }}"
