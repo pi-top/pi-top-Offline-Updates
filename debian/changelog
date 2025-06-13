@@ -1,3 +1,10 @@
+pi-top-usb-setup-src (0.3.1-3) bullseye; urgency=medium
+
+  * Ensure qemu-user-static is configured when updating pi-topOS image
+  * Remove unnecessary packages
+
+ -- pi-top <deb-maintainers@pi-top.com>  Fri, 13 Jun 2025 17:24:30 +0000
+
 pi-top-usb-setup-src (0.3.1-2) bullseye; urgency=medium
 
   * Use typing.Union for compatibility with python 3.9 (#38)
