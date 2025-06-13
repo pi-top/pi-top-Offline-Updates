@@ -60,7 +60,8 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y \
             systemd-container \
-            qemu-user-static
+            qemu-user-static \
+            binfmt-support
 
       - name: Get pi-topOS image filename
         run: |
@@ -79,9 +80,23 @@ jobs:
           partitionIndex: 4
           extraDiskSpace: 1024
 
+      - name: Setup QEMU for ARM
+        run: |
+          # Copy QEMU static binaries to the container
+          sudo cp /usr/bin/qemu-arm-static "${{ env.MOUNT_POINT }}/usr/bin/"
+          sudo cp /usr/bin/qemu-aarch64-static "${{ env.MOUNT_POINT }}/usr/bin/"
+
+          # Register binary formats
+          echo ':qemu-arm:M::\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x28\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-arm-static:CF' | sudo tee /proc/sys/fs/binfmt_misc/register
+          echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:CF' | sudo tee /proc/sys/fs/binfmt_misc/register
+
       - name: Update pi-topOS container and download packages
         run: |
-          sudo systemd-nspawn --pipe --bind "$PWD":/packages  -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
+          # Ensure qemu-user-static is properly set up
+          sudo update-binfmts --enable qemu-arm
+          sudo update-binfmts --enable qemu-aarch64
+
+          sudo systemd-nspawn --pipe --bind "$PWD":/packages --bind /usr/bin/qemu-arm-static:/usr/bin/qemu-arm-static -D "${{ env.MOUNT_POINT }}" /bin/bash << EOF
             # Update system and download packages
             apt update
             DEBIAN_FRONTEND=noninteractive apt dist-upgrade -y
