@@ -395,9 +395,9 @@ class Open(NetworkBase):
 
 @dataclass()
 class WpaEnterprise(NetworkBase):
-    authentication: (
-        PWDAuthentication | TLSAuthentication | TTLSAuthentication | PEAPAuthentication
-    )
+    authentication: Union[
+        PWDAuthentication, TLSAuthentication, TTLSAuthentication, PEAPAuthentication
+    ]
 
     @classmethod
     def from_kwargs(cls, **kwargs):
