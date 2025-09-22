@@ -80,16 +80,6 @@ jobs:
           partitionIndex: 4
           extraDiskSpace: 1024
 
-      - name: Setup QEMU for ARM
-        run: |
-          # Copy QEMU static binaries to the container
-          sudo cp /usr/bin/qemu-arm-static "${{ env.MOUNT_POINT }}/usr/bin/"
-          sudo cp /usr/bin/qemu-aarch64-static "${{ env.MOUNT_POINT }}/usr/bin/"
-
-          # Register binary formats
-          echo ':qemu-arm:M::\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x28\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-arm-static:CF' | sudo tee /proc/sys/fs/binfmt_misc/register
-          echo ':qemu-aarch64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/bin/qemu-aarch64-static:CF' | sudo tee /proc/sys/fs/binfmt_misc/register
-
       - name: Update pi-topOS container and download packages
         run: |
           # Ensure qemu-user-static is properly set up
