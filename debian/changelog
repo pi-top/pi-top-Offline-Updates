@@ -1,3 +1,13 @@
+pi-top-usb-setup-src (0.3.1-3) bullseye; urgency=medium
+
+  * Ensure qemu-user-static is configured when updating pi-topOS image
+  * Remove unnecessary packages
+  * Use typing.Union in WpaEnterprise class definition for compatibility (#42)
+  * Remove QEMU setup from GitHub Actions workflow (#43)
+  * Update package overrides for pt_os_web_portal to include PEP386 compliance (#44)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Wed, 24 Sep 2025 14:26:54 +0000
+
 pi-top-usb-setup-src (0.3.1-2) bullseye; urgency=medium
 
   * Use typing.Union for compatibility with python 3.9 (#38)
