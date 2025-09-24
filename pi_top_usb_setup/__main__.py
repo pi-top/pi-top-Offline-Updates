@@ -30,9 +30,11 @@ def find_mount_point(device: str) -> str:
 @click.version_option()
 @click.argument("mount_point_or_device", type=click.Path(exists=True))
 @click.option("--skip-dialog", is_flag=True)
+@click.option("--skip-update", is_flag=True)
 def main(
     mount_point_or_device,
     skip_dialog,
+    skip_update,
 ) -> None:
     mount_point = mount_point_or_device
     if is_device(mount_point_or_device):
@@ -48,6 +50,8 @@ def main(
 
     if skip_dialog:
         os.environ["PT_USB_SETUP_SKIP_DIALOG"] = "1"
+    if skip_update:
+        logger.warning("'--skip-update' is deprecated; ignoring...")
     if mount_point:
         os.environ["PT_USB_SETUP_MOUNT_POINT"] = mount_point
 
