@@ -28,14 +28,22 @@ def find_mount_point(device: str) -> str:
 @click.command()
 @click_logging.simple_verbosity_option(logger)
 @click.version_option()
-@click.argument("mount_point_or_device", type=click.Path(exists=True))
+@click.argument("mount_point_or_device", type=click.Path(exists=True), required=False)
 @click.option("--skip-dialog", is_flag=True)
+@click.option("--skip-update", is_flag=True)
 def main(
     mount_point_or_device,
     skip_dialog,
+    skip_update,
 ) -> None:
     mount_point = mount_point_or_device
-    if is_device(mount_point_or_device):
+    if mount_point is None:
+        # support restart from older versions of the app, where
+        # no mount point was provided; look for the update bundle
+        # in the /tmp directory
+        mount_point = "/tmp/"
+
+    if mount_point_or_device and is_device(mount_point_or_device):
         mount_point = find_mount_point(mount_point_or_device)
         logger.info(f"Mount point for {mount_point_or_device} is {mount_point}")
 
@@ -48,6 +56,8 @@ def main(
 
     if skip_dialog:
         os.environ["PT_USB_SETUP_SKIP_DIALOG"] = "1"
+    if skip_update:
+        logger.warning("'--skip-update' is deprecated; ignoring...")
     if mount_point:
         os.environ["PT_USB_SETUP_MOUNT_POINT"] = mount_point
 
