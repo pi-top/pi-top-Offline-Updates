@@ -1,3 +1,10 @@
+pi-top-usb-setup-src (0.3.2-2) bullseye; urgency=medium
+
+  * Update bookworm OS URL to 2026 release (#47)
+  * Regenerate Debian workflows: drop bullseye (#49)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Fri, 30 Oct 2026 16:24:33 +0000
+
 pi-top-usb-setup-src (0.3.2-1) bullseye; urgency=medium
 
   * Support restarting app from an older version (#45)
