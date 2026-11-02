@@ -47,7 +47,6 @@ File structure for pi-top-usb-setup.tar.gz
             # shell scripts to run
             01-update-certs.sh
             ...
-        updates/
         updates_bookworm/
 
 

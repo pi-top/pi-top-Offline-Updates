@@ -23,10 +23,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - DISTRO: "bullseye"
-            PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bullseye/pi-topOS_bullseye_release_armhf_2024-08-28_B66.zip"
-            PACKAGES_FOLDER_NAME: "updates"
-            COMPRESSED_UPDATES_FILENAME: "updates.tar.gz"
           - DISTRO: "bookworm"
             PI_TOP_OS_URL: "https://storage.googleapis.com/pt-os-release/pi-topOS-bookworm/pi-topOS_bookworm_release_armhf_2026-06-08_B109.zip"
             PACKAGES_FOLDER_NAME: "updates_bookworm"
@@ -165,7 +161,6 @@ jobs:
       - name: Extract files and combine them
         run: |
           mkdir -p pi-top-usb-setup
-          tar -xvf files-bullseye/pi-top-usb-setup-bullseye.tar.gz
           tar -xvf files-bookworm/pi-top-usb-setup-bookworm.tar.gz
           rm -rf files-*
           tar -czvf pi-top-usb-setup.tar.gz pi-top-usb-setup
