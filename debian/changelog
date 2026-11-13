@@ -1,3 +1,9 @@
+pi-top-usb-setup-src (0.3.3-1) bookworm; urgency=medium
+
+  * Allow running the changelog bump by hand (#53)
+
+ -- pi-top <deb-maintainers@pi-top.com>  Fri, 13 Nov 2026 14:15:00 +0000
+
 pi-top-usb-setup-src (0.3.2-2) bullseye; urgency=medium
 
   * Update bookworm OS URL to 2026 release (#47)
